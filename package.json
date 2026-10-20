@@ -1,0 +1,26 @@
+{
+  "name": "wsi-framework",
+  "private": true,
+  "type": "module",
+  "workspaces": [
+    "packages/*",
+    "examples/*"
+  ],
+  "scripts": {
+    "build": "npm run build -w @wsi/agent-player && npm run build -w @wsi/agent-platform && npm run build -w @wsi/forest-example",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "forest": "npm run start -w @wsi/forest-example",
+    "platform": "npm run start -w @wsi/agent-platform",
+    "platform:create-key": "npm run create-key -w @wsi/agent-platform --",
+    "platform:list-keys": "node packages/agent-platform/dist/cli.js list-keys"
+  },
+  "devDependencies": {
+    "@types/node": "^22.13.10",
+    "typescript": "^5.8.2",
+    "vitest": "^3.0.9"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}
