@@ -1,7 +1,8 @@
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
-import { z } from "zod";
 import type { ReflectedPlayer } from "./reflect.js";
+import { WAIT_DESCRIPTION } from "./reflect.js";
 import type { TurnGate } from "./turn-gate.js";
+import { SDK_VERSION } from "./protocol.js";
 
 function jsonResult(payload: unknown, isError = false) {
   return {
@@ -15,21 +16,9 @@ function toolError(error: unknown) {
   return jsonResult({ error: message }, true);
 }
 
-function zodShapeForParams(paramNames: string[]): Record<string, z.ZodTypeAny> {
-  const shape: Record<string, z.ZodTypeAny> = {};
-  for (const name of paramNames) {
-    if (/^(n|count|amount|x|y|dx|dy|index)$/i.test(name) || /Count$|Amount$/.test(name)) {
-      shape[name] = z.number();
-    } else {
-      shape[name] = z.union([z.string(), z.number(), z.boolean()]);
-    }
-  }
-  return shape;
-}
-
 /**
  * Build an in-process MCP server for one player session.
- * Tools: see, wait, and every public action method.
+ * Tools come from one definition: see, wait, and every public action.
  */
 export function createSessionMcpServer(
   player: ReflectedPlayer,
@@ -37,15 +26,13 @@ export function createSessionMcpServer(
   options?: { name?: string },
 ): McpServer {
   const server = new McpServer(
-    { name: options?.name ?? "agent-player", version: "0.1.0" },
+    { name: options?.name ?? "agent-player", version: SDK_VERSION },
     { capabilities: { tools: {} } },
   );
 
   server.registerTool(
     "see",
-    {
-      description: "Read the current game view for this player.",
-    },
+    { description: player.see.description },
     async () => {
       try {
         const view = await player.see.invoke({});
@@ -58,10 +45,7 @@ export function createSessionMcpServer(
 
   server.registerTool(
     "wait",
-    {
-      description:
-        "Block until the game calls turn() for this session, then return the current see() view.",
-    },
+    { description: WAIT_DESCRIPTION },
     async () => {
       try {
         await gate.waitForTurn();
@@ -74,38 +58,29 @@ export function createSessionMcpServer(
   );
 
   for (const action of player.actions) {
-    const shape = zodShapeForParams(action.paramNames);
-    const hasParams = action.paramNames.length > 0;
-    if (hasParams) {
+    const handler = async (args: Record<string, unknown>) => {
+      try {
+        const result = await action.invoke(args);
+        return jsonResult(result ?? { ok: true });
+      } catch (error) {
+        return toolError(error);
+      }
+    };
+
+    if (action.argsSchema) {
       server.registerTool(
         action.name,
         {
-          description: `Action: ${action.name}`,
-          inputSchema: shape,
+          description: action.description,
+          inputSchema: action.argsSchema.shape,
         },
-        async (args) => {
-          try {
-            const result = await action.invoke(args as Record<string, unknown>);
-            return jsonResult(result ?? { ok: true });
-          } catch (error) {
-            return toolError(error);
-          }
-        },
+        async (args) => handler(args as Record<string, unknown>),
       );
     } else {
       server.registerTool(
         action.name,
-        {
-          description: `Action: ${action.name}`,
-        },
-        async () => {
-          try {
-            const result = await action.invoke({});
-            return jsonResult(result ?? { ok: true });
-          } catch (error) {
-            return toolError(error);
-          }
-        },
+        { description: action.description },
+        async () => handler({}),
       );
     }
   }

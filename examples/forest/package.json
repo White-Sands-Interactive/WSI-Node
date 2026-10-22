@@ -5,11 +5,9 @@
   "type": "module",
   "scripts": {
     "build": "tsc -p tsconfig.json",
-    "start": "node dist/main.js",
-    "start:scripted": "node dist/main.js --scripted"
+    "start": "node dist/main.js"
   },
   "dependencies": {
-    "@wsi/agent-player": "*",
-    "@wsi/agent-platform": "*"
+    "@whitesands/agent-player": "*"
   }
 }

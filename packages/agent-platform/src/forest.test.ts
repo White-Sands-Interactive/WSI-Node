@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { AgentServer } from "@wsi/agent-player";
+import { AgentServer } from "@whitesands/agent-player";
 import { createInlinePlatform } from "./inline.js";
 import { createScriptedModel } from "./model.js";
 

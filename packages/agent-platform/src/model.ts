@@ -1,45 +1,13 @@
-export type ToolCallRequest = {
-  name: string;
-  arguments: Record<string, unknown>;
-};
+import {
+  createScriptedModel,
+  type ModelClient,
+  type ModelDecision,
+  type ModelMessage,
+  type ToolCallRequest,
+} from "@whitesands/agent-player/testing";
 
-export type ModelMessage =
-  | { role: "system"; content: string }
-  | { role: "user"; content: string }
-  | { role: "assistant"; content: string }
-  | { role: "tool"; name: string; content: string; isError?: boolean };
-
-export type ModelDecision = {
-  toolCall: ToolCallRequest;
-  usage: { promptTokens: number; completionTokens: number };
-};
-
-export type ModelClient = {
-  /** Ask the model to choose exactly one tool call. */
-  decide(args: {
-    instructions: string;
-    tools: Array<{ name: string; description: string; inputSchema: unknown }>;
-    messages: ModelMessage[];
-  }): Promise<ModelDecision>;
-};
-
-/**
- * Scripted model for tests: returns predetermined tool calls in order.
- * When the queue is exhausted, always returns wait.
- */
-export function createScriptedModel(script: ToolCallRequest[]): ModelClient {
-  let index = 0;
-  return {
-    async decide() {
-      const call = script[index] ?? { name: "wait", arguments: {} };
-      index += 1;
-      return {
-        toolCall: call,
-        usage: { promptTokens: 1, completionTokens: 1 },
-      };
-    },
-  };
-}
+export { createScriptedModel };
+export type { ModelClient, ModelDecision, ModelMessage, ToolCallRequest };
 
 type OpenAiToolCall = {
   id: string;
@@ -63,30 +31,30 @@ export function createOpenAiModel(options: {
       const body = {
         model: options.model,
         temperature: 0,
-        tools: tools.map((t) => ({
+        tools: tools.map((tool) => ({
           type: "function" as const,
           function: {
-            name: t.name,
-            description: t.description,
-            parameters: t.inputSchema,
+            name: tool.name,
+            description: tool.description,
+            parameters: tool.inputSchema,
           },
         })),
         tool_choice: "required" as const,
         messages: [
           { role: "system", content: instructions },
-          ...messages.map((m) => {
-            if (m.role === "tool") {
+          ...messages.map((message) => {
+            if (message.role === "tool") {
               return {
                 role: "user" as const,
-                content: `Tool ${m.name} returned${m.isError ? " ERROR" : ""}: ${m.content}`,
+                content: `Tool ${message.name} returned${message.isError ? " ERROR" : ""}: ${message.content}`,
               };
             }
-            return { role: m.role, content: m.content };
+            return { role: message.role, content: message.content };
           }),
         ],
       };
 
-      const res = await fetch(`${baseUrl}/chat/completions`, {
+      const response = await fetch(`${baseUrl}/chat/completions`, {
         method: "POST",
         headers: {
           Authorization: `Bearer ${options.apiKey}`,
@@ -95,12 +63,12 @@ export function createOpenAiModel(options: {
         body: JSON.stringify(body),
       });
 
-      if (!res.ok) {
-        const text = await res.text();
-        throw new Error(`Model request failed (${res.status}): ${text}`);
+      if (!response.ok) {
+        const text = await response.text();
+        throw new Error(`Model request failed (${response.status}): ${text}`);
       }
 
-      const json = (await res.json()) as {
+      const json = (await response.json()) as {
         choices?: Array<{ message?: { tool_calls?: OpenAiToolCall[]; content?: string } }>;
         usage?: { prompt_tokens?: number; completion_tokens?: number };
       };

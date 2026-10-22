@@ -24,7 +24,7 @@
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.30.0",
-    "@wsi/agent-player": "*",
+    "@whitesands/agent-player": "*",
     "ws": "^8.18.1"
   },
   "devDependencies": {

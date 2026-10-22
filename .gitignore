@@ -6,4 +6,6 @@ dist/
 .DS_Store
 coverage/
 packages/agent-platform/data/
+packages/agent-player/docs/
 *.log
+*.tgz

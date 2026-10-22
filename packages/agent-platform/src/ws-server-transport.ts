@@ -1,6 +1,6 @@
 import type { Transport } from "@modelcontextprotocol/sdk/shared/transport.js";
 import type { JSONRPCMessage } from "@modelcontextprotocol/sdk/types.js";
-import type { Envelope } from "@wsi/agent-player/protocol";
+import type { Envelope } from "@whitesands/agent-player/protocol";
 
 export type EnvelopeSender = (envelope: Envelope) => void;
 
@@ -12,14 +12,16 @@ export class PlatformSessionTransport implements Transport {
   sessionId?: string;
 
   private readonly sid: string;
-  private readonly sendEnvelope: EnvelopeSender;
+  private sender: EnvelopeSender;
   private started = false;
   private closed = false;
+  private paused = false;
+  private readonly buffer: JSONRPCMessage[] = [];
 
   constructor(sessionId: string, sendEnvelope: EnvelopeSender) {
     this.sid = sessionId;
     this.sessionId = sessionId;
-    this.sendEnvelope = sendEnvelope;
+    this.sender = sendEnvelope;
   }
 
   async start(): Promise<void> {
@@ -33,9 +35,27 @@ export class PlatformSessionTransport implements Transport {
     this.onclose?.();
   }
 
+  pause(): void {
+    this.paused = true;
+  }
+
+  /** Point outbound MCP messages at a new socket and flush anything queued while paused. */
+  resume(sendEnvelope: EnvelopeSender): void {
+    this.sender = sendEnvelope;
+    this.paused = false;
+    const queued = this.buffer.splice(0, this.buffer.length);
+    for (const message of queued) {
+      this.sender({ type: "mcp", sessionId: this.sid, message });
+    }
+  }
+
   async send(message: JSONRPCMessage): Promise<void> {
     if (this.closed) throw new Error("Transport closed");
-    this.sendEnvelope({ type: "mcp", sessionId: this.sid, message });
+    if (this.paused) {
+      this.buffer.push(message);
+      return;
+    }
+    this.sender({ type: "mcp", sessionId: this.sid, message });
   }
 
   receive(message: unknown): void {

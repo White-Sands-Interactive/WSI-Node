@@ -1,0 +1,7 @@
+{
+  "entryPoints": ["src/index.ts", "src/testing.ts", "src/protocol.ts"],
+  "out": "docs",
+  "excludePrivate": true,
+  "excludeInternal": true,
+  "readme": "README.md"
+}
