@@ -1,8 +1,8 @@
 # WSI Agent Player Framework
 
-A TypeScript SDK and platform so a game can start a remote agent from inside the game. The developer writes a player class and calls `start` and `turn`. The SDK owns the MCP server; the model stays on the platform.
+A TypeScript SDK so a game can start a remote agent from inside the game. The developer writes a player class and calls `start` and `turn`. The SDK owns the MCP server; the model stays on the platform.
 
-The installable package is [`@whitesands/agent-player`](packages/agent-player/README.md).
+The installable package is [`@whitesands/agent-player`](packages/agent-player/README.md). The platform it connects to is a separate Go service in [White-Sands-Interactive/Platform](https://github.com/White-Sands-Interactive/Platform).
 
 ```ts
 import { AgentServer } from "@whitesands/agent-player";
@@ -18,7 +18,6 @@ const result = await ada.turn();
 | --- | --- |
 | `@whitesands/agent-player` | Public SDK. In-process MCP server, outbound connection, class-to-tool reflection, `wait` / `turn` |
 | `@whitesands/agent-player/testing` | Same agent loop, in memory, for tests and offline demos |
-| `@wsi/agent-platform` | Local platform service used until the hosted endpoint exists |
 | `examples/forest` | Reflection-based forest demo |
 | `examples/courier` | Typed actions and a goal |
 
@@ -32,15 +31,15 @@ npm run forest
 npm run start -w @wsi/courier-example
 ```
 
-Remote forest (platform in another terminal):
+Remote forest, with the Go platform running from the Platform repo:
 
 ```bash
-npm run platform:create-key -- demo
-MODEL_API_KEY=... MODEL_BASE_URL=... MODEL_NAME=... npm run platform
+./platform create-key demo
+MODEL_API_KEY=... MODEL_BASE_URL=... MODEL_NAME=... ./platform serve
 PLATFORM_KEY=pk_... npm run start -w @wsi/forest-example -- --remote
 ```
 
-Do not set a relative `PLATFORM_DATA_DIR`. Keys live in `packages/agent-platform/data`.
+The wire protocol is `packages/agent-player/src/protocol.ts`. A change there needs the matching change in the Platform repo's `internal/protocol`.
 
 ## Publish
 

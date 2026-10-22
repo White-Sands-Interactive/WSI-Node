@@ -113,6 +113,24 @@ describe("AgentServer", () => {
     await agents.close();
   });
 
+  it("runs two sessions on one AgentServer", async () => {
+    const a = new TinyWorld();
+    const b = new TinyWorld();
+    const agents = new AgentServer({
+      inline: createTestPlatform([
+        { name: "move", arguments: { dx: 1 } },
+        { name: "move", arguments: { dx: 5 } },
+      ]),
+    });
+    const agentA = await agents.start(a);
+    const agentB = await agents.start(b);
+    await agentA.turn();
+    await agentB.turn();
+    expect(a.x).toBe(1);
+    expect(b.x).toBe(5);
+    await agents.close();
+  });
+
   it("rejects a turn that exceeds the timeout", async () => {
     const agents = new AgentServer({ inline: idle, turnTimeoutMs: 20 });
     const agent = await agents.start(new TinyWorld());

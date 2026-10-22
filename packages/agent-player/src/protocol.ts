@@ -1,4 +1,7 @@
-/** Wire protocol between AgentServer (SDK) and agent-platform. Version 1. */
+/**
+ * Wire protocol between AgentServer (SDK) and the platform. Version 1.
+ * The platform's Go copy lives in White-Sands-Interactive/Platform, internal/protocol.
+ */
 
 export const PROTOCOL_VERSION = 1;
 export const SDK_VERSION = "0.1.0";
