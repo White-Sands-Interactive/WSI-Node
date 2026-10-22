@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.2.0
+
+### Minor Changes
+
+- 46faef6: Publish the agent player SDK: typed actions, turn results, reconnect, and an offline testing entry.
+
 ## 0.1.0
 
 First public SDK release.
