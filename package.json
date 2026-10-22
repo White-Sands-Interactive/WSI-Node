@@ -10,7 +10,7 @@
     "build": "npm run build -w @whitesands/agent-player && npm run build -w @wsi/agent-platform && npm run build -w @wsi/forest-example && npm run build -w @wsi/courier-example",
     "docs": "npm run docs -w @whitesands/agent-player",
     "version-packages": "changeset version",
-    "release": "npm run build -w @whitesands/agent-player && npm publish -w @whitesands/agent-player --access public --provenance",
+    "release": "npm run build -w @whitesands/agent-player && npm publish -w @whitesands/agent-player --access public",
     "test": "vitest run",
     "test:watch": "vitest",
     "forest": "npm run start -w @wsi/forest-example",

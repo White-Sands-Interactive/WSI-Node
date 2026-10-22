@@ -44,4 +44,4 @@ Do not set a relative `PLATFORM_DATA_DIR`. Keys live in `packages/agent-platform
 
 ## Publish
 
-Changesets version the SDK. The publish workflow on `main` uses `NPM_TOKEN` and npm provenance. The package starts at `0.x`.
+Changesets version the SDK. The publish workflow on `main` uses `NPM_TOKEN`. The package starts at `0.x`.
