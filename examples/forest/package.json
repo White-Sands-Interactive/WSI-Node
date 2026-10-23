@@ -1,0 +1,13 @@
+{
+  "name": "@wsi/forest-example",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "start": "node dist/main.js"
+  },
+  "dependencies": {
+    "@whitesands/agent-player": "file:../.."
+  }
+}

@@ -1,0 +1,79 @@
+{
+  "name": "@whitesands/agent-player",
+  "version": "1.0.0",
+  "description": "Start a remote game agent from a player class. The SDK owns the MCP server; the model stays on the platform.",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/White-Sands-Interactive/WSI-Node-Framework.git"
+  },
+  "homepage": "https://github.com/White-Sands-Interactive/WSI-Node-Framework#readme",
+  "bugs": {
+    "url": "https://github.com/White-Sands-Interactive/WSI-Node-Framework/issues"
+  },
+  "type": "module",
+  "license": "MIT",
+  "main": "./dist/index.cjs",
+  "module": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js",
+      "require": "./dist/index.cjs"
+    },
+    "./testing": {
+      "types": "./dist/testing.d.ts",
+      "import": "./dist/testing.js",
+      "require": "./dist/testing.cjs"
+    },
+    "./protocol": {
+      "types": "./dist/protocol.d.ts",
+      "import": "./dist/protocol.js",
+      "require": "./dist/protocol.cjs"
+    }
+  },
+  "files": [
+    "dist",
+    "README.md",
+    "LICENSE",
+    "CHANGELOG.md"
+  ],
+  "sideEffects": false,
+  "publishConfig": {
+    "access": "public"
+  },
+  "workspaces": [
+    "examples/*"
+  ],
+  "scripts": {
+    "build": "tsup && npm run build -w @wsi/forest-example && npm run build -w @wsi/courier-example && npm run build -w @wsi/ferry-example",
+    "docs": "typedoc",
+    "clean": "rm -rf dist docs",
+    "release": "tsup && node scripts/publish.mjs",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "forest": "npm run start -w @wsi/forest-example --",
+    "courier": "npm run start -w @wsi/courier-example --",
+    "ferry": "npm run start -w @wsi/ferry-example --"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.30.0",
+    "better-sqlite3": "^12.11.1",
+    "ws": "^8.18.1",
+    "zod": "^3.24.2",
+    "zod-to-json-schema": "^3.24.5"
+  },
+  "devDependencies": {
+    "@changesets/cli": "^2.29.2",
+    "@types/better-sqlite3": "^9.6.0",
+    "@types/node": "^22.13.10",
+    "@types/ws": "^8.18.0",
+    "tsup": "^8.4.0",
+    "typedoc": "^0.28.1",
+    "typescript": "^5.8.2",
+    "vitest": "^3.0.9"
+  }
+}
