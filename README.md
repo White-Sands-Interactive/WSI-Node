@@ -1,7 +1,7 @@
 # WSI Agent Player
 
 [![npm version](https://img.shields.io/npm/v/@whitesands/agent-player.svg)](https://www.npmjs.com/package/@whitesands/agent-player)
-[![Build Status](https://github.com/White-Sands-Interactive/WSI-Node-Framework/actions/workflows/ci.yml/badge.svg)](https://github.com/White-Sands-Interactive/WSI-Node-Framework/actions/workflows/ci.yml)
+[![Build Status](https://github.com/White-Sands-Interactive/WSI-Node/actions/workflows/ci.yml/badge.svg)](https://github.com/White-Sands-Interactive/WSI-Node/actions/workflows/ci.yml)
 
 The library starts a remote game agent from a player class. The game calls `start` and `turn`. The SDK publishes that class as tools. The model runs on the [platform](https://github.com/White-Sands-Interactive/Platform), so the game process never holds the model key.
 
