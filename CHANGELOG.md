@@ -1,8 +1,8 @@
 # Changelog
 
-## 0.1.0
+## 0.2.0
 
-First public SDK release.
+First release published to npm.
 
 - `AgentServer` reads `WSI_PLATFORM_KEY` and `WSI_PLATFORM_URL`.
 - Player classes can declare zod argument schemas and descriptions.

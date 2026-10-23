@@ -1,9 +1,18 @@
+import { mkdtempSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import { z } from "zod";
 import { AgentServer } from "./agent-server.js";
 import { TurnTimeoutError } from "./errors.js";
-import { createTestPlatform } from "./testing.js";
-import type { AgentEvent, InlinePlatform } from "./types.js";
+import {
+  createTestPlatform,
+  loopEventToAgentEvent,
+  SessionLoop,
+  type ModelClient,
+  type ToolCallRequest,
+} from "./testing.js";
+import type { AgentEvent, InlinePlatform, StartSessionRequest } from "./types.js";
 
 class TinyWorld {
   x = 0;
@@ -154,6 +163,7 @@ describe("AgentServer", () => {
     expect(goal).toBe("Collect wood");
     expect(instructions).toContain("Stay calm.");
     expect(instructions).toContain("call wait first");
+    expect(instructions).toContain("done list");
     await agents.close();
   });
 
@@ -182,4 +192,82 @@ describe("AgentServer", () => {
     if (previous === undefined) delete process.env.WSI_PLATFORM_KEY;
     else process.env.WSI_PLATFORM_KEY = previous;
   });
+
+  it("shows this character's earlier actions on the next view", async () => {
+    const views: string[] = [];
+    const memoryPath = join(mkdtempSync(join(tmpdir(), "wsi-agent-")), "memory.sqlite");
+    const agents = new AgentServer({
+      memoryPath,
+      inline: platformThatRecordsViews(
+        [
+          { name: "move", arguments: { dx: 1 } },
+          { name: "move", arguments: { dx: 4 } },
+        ],
+        views,
+      ),
+    });
+    const world = new TinyWorld();
+    const agent = await agents.start(world, { name: "Ada" });
+    await agent.turn();
+    await agent.turn();
+    expect(doneFromPrompt(views[0] ?? "")).toEqual([]);
+    expect(doneFromPrompt(views[1] ?? "")).toEqual([{ action: "move", args: { dx: 1 }, ok: true }]);
+    expect(world.x).toBe(5);
+    await agents.close();
+  });
 });
+
+function platformThatRecordsViews(script: ToolCallRequest[], views: string[]): InlinePlatform {
+  const loops = new Map<string, SessionLoop>();
+  let index = 0;
+  const model: ModelClient = {
+    async decide({ messages }) {
+      const prompt = messages.find((message) => message.role === "user");
+      if (prompt && prompt.role === "user") views.push(prompt.content);
+      const call = script[index] ?? { name: "wait", arguments: {} };
+      index += 1;
+      return {
+        toolCall: call,
+        usage: { promptTokens: 1, completionTokens: 1 },
+      };
+    },
+  };
+  return {
+    async startSession(request: StartSessionRequest) {
+      const loop = new SessionLoop({
+        sessionId: request.sessionId,
+        transport: request.transport,
+        instructions: request.instructions,
+        ...(request.goal ? { goal: request.goal } : {}),
+        model,
+        onUsage: async (tokens) => {
+          await request.onUsage?.(tokens);
+        },
+        onTurnResult: request.onTurnResult,
+        onEvent: (event) => {
+          request.onEvent?.(loopEventToAgentEvent(request.sessionId, event));
+        },
+      });
+      loops.set(request.sessionId, loop);
+      await loop.start();
+    },
+    async stopSession(sessionId: string) {
+      const loop = loops.get(sessionId);
+      if (!loop) return;
+      loops.delete(sessionId);
+      await loop.stop();
+    },
+    async close() {
+      const running = [...loops.values()];
+      loops.clear();
+      for (const loop of running) await loop.stop();
+    },
+  };
+}
+
+function doneFromPrompt(prompt: string): unknown {
+  const start = prompt.indexOf("{");
+  const end = prompt.lastIndexOf("}");
+  const view = JSON.parse(prompt.slice(start, end + 1)) as { done?: unknown };
+  return view.done;
+}

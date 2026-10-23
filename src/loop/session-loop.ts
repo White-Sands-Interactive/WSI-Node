@@ -182,30 +182,27 @@ export class SessionLoop {
       ];
 
       let action = await this.decideAction(actionTools, messages, usage);
+      let result: ToolPayload | undefined;
+      let firstError: string;
       if (action.name === "wait" || action.name === "see") {
-        const fallback = actionTools[0];
-        if (!fallback) {
-          this.options.onTurnResult({ ok: false, error: "No action tools available", attempts: 0, usage });
+        // wait and see are how the loop reads state. They are not a move.
+        firstError = `${action.name} is not an action`;
+      } else {
+        this.emit({ event: "action", action: action.name, args: action.arguments });
+        result = await this.callTool(action.name, action.arguments);
+        if (!result.isError) {
+          this.options.onTurnResult({
+            ok: true,
+            action: action.name,
+            args: action.arguments,
+            result: result.json,
+            attempts: 1,
+            usage,
+          });
           continue;
         }
-        action = { name: fallback.name, arguments: {} };
+        firstError = toolErrorMessage(result);
       }
-
-      this.emit({ event: "action", action: action.name, args: action.arguments });
-      let result = await this.callTool(action.name, action.arguments);
-      if (!result.isError) {
-        this.options.onTurnResult({
-          ok: true,
-          action: action.name,
-          args: action.arguments,
-          result: result.json,
-          attempts: 1,
-          usage,
-        });
-        continue;
-      }
-
-      const firstError = toolErrorMessage(result);
       attemptDetails.push({ action: action.name, args: action.arguments, error: firstError });
       log(this.options.logger, "warn", `session ${this.options.sessionId} action ${action.name} failed: ${firstError}; retrying once`);
       this.emit({ event: "retry", action: action.name, args: action.arguments, error: firstError });
@@ -217,7 +214,7 @@ export class SessionLoop {
       messages.push({
         role: "tool",
         name: action.name,
-        content: result.text,
+        content: result?.text ?? firstError,
         isError: true,
       });
       messages.push({

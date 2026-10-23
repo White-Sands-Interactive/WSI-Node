@@ -1,7 +1,7 @@
 import path from "node:path";
 import { defineConfig } from "vitest/config";
 
-const player = path.resolve("packages/agent-player/src");
+const player = path.resolve("src");
 
 export default defineConfig({
   resolve: {
@@ -12,7 +12,7 @@ export default defineConfig({
     ],
   },
   test: {
-    include: ["packages/*/src/**/*.test.ts", "packages/*/tests/**/*.test.ts"],
+    include: ["src/**/*.test.ts"],
     testTimeout: 15_000,
   },
 });

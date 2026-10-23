@@ -7,5 +7,5 @@
   "access": "public",
   "baseBranch": "main",
   "updateInternalDependencies": "patch",
-  "ignore": ["@wsi/forest-example", "@wsi/courier-example"]
+  "ignore": ["@wsi/forest-example", "@wsi/courier-example", "@wsi/ferry-example"]
 }

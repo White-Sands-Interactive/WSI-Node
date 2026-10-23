@@ -19,7 +19,7 @@ jobs:
           registry-url: https://registry.npmjs.org
           cache: npm
       - run: npm ci
-      - run: npm run build -w @whitesands/agent-player
+      - run: npx tsup
       - uses: changesets/action@v1
         with:
           version: npm run version-packages

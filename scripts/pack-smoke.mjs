@@ -5,7 +5,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
-const player = path.join(root, "packages/agent-player");
+const player = root;
 const dir = await mkdtemp(path.join(tmpdir(), "wsi-pack-"));
 
 const smoke = `

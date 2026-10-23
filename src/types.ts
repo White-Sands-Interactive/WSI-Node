@@ -115,6 +115,13 @@ export type AgentServerOptions = {
   onEvent?: EventListener;
   /** Where the SDK writes warnings. Nothing is written when omitted. */
   logger?: Logger;
+  /**
+   * SQLite file of actions each character has already called.
+   * Later views include that session's `done` list.
+   * Defaults to `.wsi/agent-memory.sqlite` in the current directory.
+   * Pass false to keep no action history.
+   */
+  memoryPath?: string | false;
 };
 
 export type { AttemptRecord, TokenUsage, ToolDescriptor, TurnReport };

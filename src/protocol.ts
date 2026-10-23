@@ -4,7 +4,7 @@
  */
 
 export const PROTOCOL_VERSION = 1;
-export const SDK_VERSION = "0.1.0";
+export const SDK_VERSION = "0.2.0";
 
 /** How long a disconnected session can be resumed. Shared by both sides. */
 export const SESSION_RESUME_GRACE_MS = 30_000;
@@ -137,6 +137,7 @@ export const DEFAULT_AGENT_INSTRUCTIONS = [
   "You are a remote game agent. Tools are provided by the game.",
   "On every turn: call wait first. It blocks until the game grants your turn and then returns the current view from see.",
   "After wait returns, call exactly one action tool (not see, not wait).",
+  "The view's done list is what this character has already called in this session, oldest first. Use it when choosing the next action.",
   "If an action tool returns an error, retry once with a corrected action. A second failure ends the turn as failed.",
 ].join("\n");
 

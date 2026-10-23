@@ -14,6 +14,7 @@ export default defineConfig({
   },
   sourcemap: true,
   clean: true,
+  external: ["better-sqlite3"],
   target: "es2022",
   splitting: false,
   outDir: "dist",

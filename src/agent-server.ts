@@ -5,6 +5,7 @@ import type { Transport } from "@modelcontextprotocol/sdk/shared/transport.js";
 import { ConnectionLostError, TurnFailedError } from "./errors.js";
 import type { Logger } from "./logger.js";
 import { log } from "./logger.js";
+import { defaultMemoryPath, SessionMemory } from "./memory.js";
 import { PlatformConnection } from "./platform-connection.js";
 import {
   DEFAULT_AGENT_INSTRUCTIONS,
@@ -55,6 +56,7 @@ export class AgentServer {
   private readonly sessions = new Map<string, SessionRecord>();
   private readonly listeners = new Set<EventListener>();
   private readonly inline: InlinePlatform | undefined;
+  private memory: SessionMemory | null = null;
   private started = false;
   private closing = false;
 
@@ -106,8 +108,17 @@ export class AgentServer {
     const sessionToken = randomUUID();
     const gate = new TurnGate();
     const name = options?.name ?? instance.constructor?.name ?? "player";
+    const memory = this.actionMemory();
     const server = createSessionMcpServer(reflected, gate, {
       name: `agent-player:${name}`,
+      ...(memory
+        ? {
+            actions: {
+              record: (entry) => memory.record(sessionId, name, entry),
+              done: () => memory.done(sessionId),
+            },
+          }
+        : {}),
     });
     const instructions = [this.options.instructions ?? DEFAULT_AGENT_INSTRUCTIONS, options?.instructions]
       .filter((part): part is string => Boolean(part && part.length > 0))
@@ -327,8 +338,19 @@ export class AgentServer {
       await this.connection.close();
       this.connection = null;
     }
+    this.memory?.close();
+    this.memory = null;
     this.started = false;
     this.closing = false;
+  }
+
+  private actionMemory(): SessionMemory | null {
+    if (this.options.memoryPath === false) return null;
+    if (!this.memory) {
+      const path = this.options.memoryPath ?? defaultMemoryPath();
+      this.memory = new SessionMemory(path);
+    }
+    return this.memory;
   }
 
   async [Symbol.asyncDispose](): Promise<void> {

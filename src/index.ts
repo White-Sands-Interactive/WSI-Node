@@ -6,7 +6,6 @@ export {
   TurnFailedError,
   TurnTimeoutError,
 } from "./errors.js";
-export { DEFAULT_AGENT_INSTRUCTIONS, PROTOCOL_VERSION, SDK_VERSION } from "./protocol.js";
 export type { AgentMetadata, ActionSpec } from "./reflect.js";
 export type { Logger } from "./logger.js";
 export type {
@@ -14,10 +13,8 @@ export type {
   AgentHandle,
   AgentServerOptions,
   EventListener,
-  InlinePlatform,
   StartOptions,
-  StartSessionRequest,
   TurnOptions,
   TurnResult,
 } from "./types.js";
-export type { TokenUsage, ToolDescriptor, TurnReport } from "./protocol.js";
+export type { AttemptRecord, TokenUsage } from "./protocol.js";

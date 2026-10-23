@@ -1,10 +1,11 @@
 node_modules/
+.wsi/
 dist/
 *.tsbuildinfo
 .env
 .env.local
 .DS_Store
 coverage/
-packages/agent-player/docs/
+docs/
 *.log
 *.tgz
