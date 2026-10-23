@@ -2,6 +2,10 @@
 
 ## 0.2.0
 
+### Minor Changes
+
+- 46faef6: Publish the agent player SDK: typed actions, turn results, reconnect, and an offline testing entry.
+
 First release published to npm.
 
 - `AgentServer` reads `WSI_PLATFORM_KEY` and `WSI_PLATFORM_URL`.
