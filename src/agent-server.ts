@@ -29,7 +29,7 @@ import type {
 import { SessionMuxTransport } from "./ws-transport.js";
 
 const DEFAULT_TURN_TIMEOUT_MS = 60_000;
-const DEFAULT_PLATFORM_URL = "ws://127.0.0.1:8787";
+const PLATFORM_URL = "wss://api.whitesandsint.com";
 
 type SessionRecord = {
   id: string;
@@ -67,7 +67,7 @@ export class AgentServer {
     }
     this.options = options;
     this.platformKey = platformKey || "inline";
-    this.platformUrl = options.platformUrl ?? process.env.WSI_PLATFORM_URL ?? DEFAULT_PLATFORM_URL;
+    this.platformUrl = options.platformUrl ?? PLATFORM_URL;
     this.logger = options.logger;
     this.inline = options.inline;
     if (options.onEvent) this.listeners.add(options.onEvent);

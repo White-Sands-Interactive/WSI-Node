@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.1.0
+
+### Minor Changes
+
+- The SDK connects to `wss://api.whitesandsint.com`. The platform URL is no longer read from the environment.
+
 ## 1.0.0
 
 ### Major Changes

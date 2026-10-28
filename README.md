@@ -3,7 +3,7 @@
 [![npm version](https://img.shields.io/npm/v/@whitesands/agent-player.svg)](https://www.npmjs.com/package/@whitesands/agent-player)
 [![Build Status](https://github.com/White-Sands-Interactive/WSI-Node/actions/workflows/ci.yml/badge.svg)](https://github.com/White-Sands-Interactive/WSI-Node/actions/workflows/ci.yml)
 
-The library starts a remote game agent from a player class. The game calls `start` and `turn`. The SDK publishes that class as tools. The model runs on the [platform](https://github.com/White-Sands-Interactive/Platform), so the game process never holds the model key.
+The library starts a remote game agent from a player class. The game calls `start` and `turn`. The SDK publishes that class as tools. The model runs on the platform, so the game process never holds the model key.
 
 The library also provides:
 
@@ -44,10 +44,9 @@ Set the platform key, then start one agent per character. `turn()` grants that c
 
 ```sh
 export WSI_PLATFORM_KEY=pk_...
-export WSI_PLATFORM_URL=ws://127.0.0.1:8787
 ```
 
-`WSI_PLATFORM_URL` defaults to `ws://127.0.0.1:8787` when it is unset.
+The SDK connects to `wss://api.whitesandsint.com`.
 
 ```ts
 import { AgentServer } from "@whitesands/agent-player";
@@ -62,7 +61,7 @@ const result = await ada.turn();
 // { action: "move", args: { dx: 1, dy: 0 }, result, attempts: 1, usage }
 ```
 
-`new AgentServer({ platformKey, platformUrl })` overrides the environment variables.
+`new AgentServer({ platformKey })` overrides `WSI_PLATFORM_KEY`.
 
 ### The player class
 
@@ -283,7 +282,7 @@ const agents = new AgentServer({
 
 ### Protocol
 
-`@whitesands/agent-player/protocol` exports the wire types and `PROTOCOL_VERSION`. The platform's copy is `internal/protocol` in [White-Sands-Interactive/Platform](https://github.com/White-Sands-Interactive/Platform). A change to the wire format has to land in both places. Game code uses the main entry and does not import the protocol.
+`@whitesands/agent-player/protocol` exports the wire types and `PROTOCOL_VERSION`. Game code uses the main entry and does not import the protocol.
 
 ## This repository
 
@@ -303,12 +302,10 @@ npm run courier
 npm run ferry
 ```
 
-Each example replays a script. Add `-- --remote` to use a platform that is already serving:
+Each example replays a script. Forest and ferry can also call the hosted platform:
 
 ```sh
-./platform create-key demo
-MODEL_API_KEY=... MODEL_BASE_URL=... MODEL_NAME=... ./platform serve
 PLATFORM_KEY=pk_... npm run forest -- --remote
 ```
 
-`./platform` is the Go server from the Platform repository. Releases are recorded in [CHANGELOG.md](CHANGELOG.md).
+Releases are recorded in [CHANGELOG.md](CHANGELOG.md).
