@@ -20,7 +20,6 @@ async function main(): Promise<void> {
   const agents = useRemote
     ? new AgentServer({
         platformKey: required("PLATFORM_KEY"),
-        ...(process.env.PLATFORM_URL ? { platformUrl: process.env.PLATFORM_URL } : {}),
       })
     : new AgentServer({
         inline: createTestPlatform([

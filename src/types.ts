@@ -99,7 +99,7 @@ export type AgentServerOptions = {
   platformKey?: string;
   /**
    * WebSocket URL of the platform.
-   * Defaults to `WSI_PLATFORM_URL`, then `ws://127.0.0.1:8787`.
+   * Defaults to `wss://api.whitesandsint.com`.
    */
   platformUrl?: string;
   /**
