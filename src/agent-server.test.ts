@@ -4,6 +4,7 @@ import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import { z } from "zod";
 import { AgentServer } from "./agent-server.js";
+import { bindDynamic } from "./reflect.js";
 import { TurnTimeoutError } from "./errors.js";
 import {
   createTestPlatform,
@@ -179,6 +180,27 @@ describe("AgentServer", () => {
     const result = await agent.turn();
     expect(result.attempts).toBe(2);
     expect(world.x).toBe(2);
+    await agents.close();
+  });
+
+  it("retries a dynamic tool once after a schema failure", async () => {
+    const player = { n: 1 };
+    bindDynamic(player, "see", "", undefined, () => ({ n: player.n }));
+    bindDynamic(player, "add", "Add dx", { dx: z.number().int() }, (args) => {
+      player.n += args.dx as number;
+      return { n: player.n };
+    });
+    const agents = new AgentServer({
+      inline: createTestPlatform([
+        { name: "add", arguments: { dx: "nope" } },
+        { name: "add", arguments: { dx: 4 } },
+      ]),
+    });
+    const agent = await agents.start(player);
+    const result = await agent.turn();
+    expect(result.attempts).toBe(2);
+    expect(result.action).toBe("add");
+    expect(player.n).toBe(5);
     await agents.close();
   });
 

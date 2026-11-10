@@ -127,6 +127,27 @@ class Villager {
 }
 ```
 
+### Tools from data
+
+`bindDynamic` registers one tool when the action is data rather than a method. Call it on the player before `start()`. `see` is allowed, including when the player has no `see()` method. `wait`, an empty name, a name starting with `_`, and a missing callback are rejected. An empty description becomes `Action: <name>`. Registering the same name again replaces that tool, including a reflected method of the same name.
+
+Arguments use the same Zod shape as `static agent`. A schema failure throws before the callback runs and uses the one retry. Extra keys are ignored.
+
+```ts
+import { AgentServer, bindDynamic } from "@whitesands/agent-player";
+import { z } from "zod";
+
+const scout = { n: 1 };
+bindDynamic(scout, "see", "", undefined, () => ({ n: scout.n }));
+bindDynamic(scout, "add", "Add dx", { dx: z.number().int() }, (args) => {
+  scout.n += args.dx as number;
+  return { n: scout.n };
+});
+
+const agents = new AgentServer();
+const agent = await agents.start(scout);
+```
+
 ### Turns
 
 `turn()` does not choose the action. It unblocks that session's `wait`. The platform reads `see()`, calls one action, and reports back.

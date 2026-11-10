@@ -6,6 +6,7 @@ export {
   TurnFailedError,
   TurnTimeoutError,
 } from "./errors.js";
+export { bindDynamic } from "./reflect.js";
 export type { AgentMetadata, ActionSpec } from "./reflect.js";
 export type { Logger } from "./logger.js";
 export type {
