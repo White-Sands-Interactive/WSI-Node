@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { z } from "zod";
-import { getParamNames, reflectPlayer } from "./reflect.js";
+import { bindDynamic, getParamNames, reflectPlayer } from "./reflect.js";
 
 class Sample {
   see() {
@@ -97,5 +97,60 @@ describe("reflectPlayer", () => {
       }
     }
     expect(() => reflectPlayer(new Broken())).toThrow(/fly/);
+  });
+
+  it("publishes a dynamic see and action, and checks arguments", async () => {
+    const player = { n: 1 };
+    let seen: Record<string, unknown> | undefined;
+    bindDynamic(player, "see", "", undefined, () => ({ n: player.n }));
+    bindDynamic(player, "add", "Add dx", { dx: z.number().int() }, (args) => {
+      seen = args;
+      player.n += args.dx as number;
+      return { n: player.n };
+    });
+
+    const reflected = reflectPlayer(player);
+    expect(reflected.see.description).toBe("Action: see");
+    expect(await reflected.see.invoke({})).toEqual({ n: 1 });
+    expect(reflected.actions.map((action) => action.name)).toEqual(["add"]);
+    expect(reflected.tools.map((tool) => tool.name).sort()).toEqual(["add", "see", "wait"]);
+    const add = reflected.actions[0]!;
+    expect(add.description).toBe("Add dx");
+    expect(add.descriptor.inputSchema.properties?.dx?.type).toBe("integer");
+    expect(await add.invoke({ dx: 4, extra: true })).toEqual({ n: 5 });
+    expect(seen).toEqual({ dx: 4 });
+    await expect(add.invoke({ dx: "no" })).rejects.toThrow(/dx/);
+  });
+
+  it("replaces a dynamic tool and a reflected method with the same name", async () => {
+    const player = new Sample();
+    bindDynamic(player, "move", "first", undefined, () => 1);
+    bindDynamic(player, "move", "", undefined, () => 2);
+    const reflected = reflectPlayer(player);
+    const moves = reflected.actions.filter((action) => action.name === "move");
+    expect(moves).toHaveLength(1);
+    expect(reflected.tools.filter((tool) => tool.name === "move")).toHaveLength(1);
+    expect(moves[0]?.description).toBe("Action: move");
+    expect(await moves[0]?.invoke({ dx: 9, dy: 9 })).toBe(2);
+  });
+
+  it("accepts a declared action that is only a dynamic tool", () => {
+    class Scripted {
+      static agent = { actions: { add: { description: "from class" } } };
+    }
+    const player = new Scripted();
+    bindDynamic(player, "see", "Look", undefined, () => ({}));
+    bindDynamic(player, "add", "Add", undefined, () => 1);
+    const reflected = reflectPlayer(player);
+    expect(reflected.actions.map((action) => action.name)).toEqual(["add"]);
+    expect(reflected.see.description).toBe("Look");
+  });
+
+  it("rejects wait, an empty name, a private name, and a missing callback", () => {
+    const player = {};
+    expect(() => bindDynamic(player, "wait", "", undefined, () => null)).toThrow('cannot publish action "wait"');
+    expect(() => bindDynamic(player, "", "", undefined, () => null)).toThrow('cannot publish action ""');
+    expect(() => bindDynamic(player, "_hidden", "", undefined, () => null)).toThrow('cannot publish action "_hidden"');
+    expect(() => bindDynamic(player, "add", "", undefined, undefined)).toThrow('cannot publish action "add"');
   });
 });
