@@ -1,6 +1,6 @@
 {
   "name": "@whitesands/agent-player",
-  "version": "1.1.0",
+  "version": "1.2.0",
   "description": "Start a remote game agent from a player class. The SDK owns the MCP server; the model stays on the platform.",
   "repository": {
     "type": "git",
@@ -46,7 +46,7 @@
     "examples/*"
   ],
   "scripts": {
-    "build": "tsup && npm run build -w @wsi/forest-example && npm run build -w @wsi/courier-example && npm run build -w @wsi/ferry-example",
+    "build": "tsup && npm run build -w @wsi/forest-example && npm run build -w @wsi/courier-example && npm run build -w @wsi/ferry-example && npm run build -w @wsi/town-example",
     "docs": "typedoc",
     "clean": "rm -rf dist docs",
     "release": "tsup && node scripts/publish.mjs",
@@ -54,7 +54,8 @@
     "test:watch": "vitest",
     "forest": "npm run start -w @wsi/forest-example --",
     "courier": "npm run start -w @wsi/courier-example --",
-    "ferry": "npm run start -w @wsi/ferry-example --"
+    "ferry": "npm run start -w @wsi/ferry-example --",
+    "town": "npm run start -w @wsi/town-example --"
   },
   "engines": {
     "node": ">=20"

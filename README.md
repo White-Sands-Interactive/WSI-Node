@@ -309,3 +309,26 @@ PLATFORM_KEY=pk_... npm run forest -- --remote
 ```
 
 Releases are recorded in [CHANGELOG.md](CHANGELOG.md).
+
+## World
+
+`World` builds a living world on top of the agent player, so a game does not write a view or actions per character. The game provides the engine: places, things with activities, and a body per character (`getPosition`, `moveTo`, `stop`, `say`). `World` serves each character's tools over MCP (`say`, `go_to`, `approach`, `use`, `give`, `emote`, `idle`), carries speech between characters and players, and decides when a character needs a turn. Who each character is comes from its role and story on the platform.
+
+```ts
+import { AgentServer, World } from "@whitesands/agent-player";
+
+const world = new World(new AgentServer(), { name: "Sandy Shores", about: "A small beach town." });
+world.addPlace("cafe", { description: "Mia's cafe", position: { x: 60, y: 0 } });
+world.addThing("espresso_machine", {
+  place: "cafe",
+  position: { x: 64, y: -4 },
+  activities: { make_coffee: { description: "Make a coffee", seconds: 6, gives: "coffee" } },
+});
+await world.addCharacter({ id: miaCharacterId, name: "Mia", body: miaBody, home: "cafe" });
+world.addPerson({ name: "Alex", getPosition: () => alexPosition });
+world.on((event) => { /* speech, relationship, status, give, thinking, turn */ });
+world.start();
+world.say("Alex", "Hi Mia!");
+```
+
+`examples/town` is a complete browser game built this way: `npm run build && WSI_PLATFORM_KEY=pk_... npm run town`, then open `http://localhost:8080`.

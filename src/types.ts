@@ -1,6 +1,6 @@
 import type { Transport } from "@modelcontextprotocol/sdk/shared/transport.js";
 import type { Logger } from "./logger.js";
-import type { AttemptRecord, TokenUsage, ToolDescriptor, TurnReport } from "./protocol.js";
+import type { AttemptRecord, Relationship, StepRecord, TokenUsage, ToolDescriptor, TurnReport } from "./protocol.js";
 
 export type TurnResult = {
   action: string;
@@ -8,6 +8,8 @@ export type TurnResult = {
   result: unknown;
   attempts: number;
   usage: TokenUsage;
+  /** Every action played, when the turn played more than one. */
+  steps?: StepRecord[];
 };
 
 export type AgentEvent =
@@ -30,6 +32,23 @@ export type AgentEvent =
       error: string;
       action?: string;
       args?: Record<string, unknown>;
+    }
+  | {
+      /** The character chose to remember a fact. Needs `memory: true`. */
+      type: "memory";
+      sessionId: string;
+      about: string;
+      note: string;
+    }
+  | {
+      /** The character's feelings about someone changed. Needs `memory: true`. */
+      type: "relationship";
+      sessionId: string;
+      about: string;
+      affinity: number;
+      label: string;
+      change: number;
+      because: string;
     }
   | { type: "disconnected" }
   | { type: "reconnected" };
@@ -55,6 +74,13 @@ export type AgentHandle = {
   stop(): Promise<void>;
   /** Subscribe to this session's action, retry, and failure events. Returns unsubscribe. */
   on(listener: EventListener): () => void;
+  /**
+   * Tell the character about something that happened, without starting a turn.
+   * It is kept in the character's memory. Needs `memory: true`.
+   */
+  observe(text: string, about?: string): void;
+  /** How the character feels about each person it knows, keyed by lower-case name. */
+  relationships(): Record<string, Relationship>;
 };
 
 export type StartOptions = {
@@ -64,6 +90,19 @@ export type StartOptions = {
   goal?: string;
   /** Extra instructions appended to the default agent prompt. */
   instructions?: string;
+  /** Send only `instructions`, without the default agent prompt. */
+  ownInstructions?: boolean;
+  /** Character to play, by its character ID from the web app. */
+  playerId?: string;
+  /**
+   * Keep the character's memory and relationships on the platform, between
+   * sessions and servers. The local `done` list is left out of the view.
+   */
+  memory?: boolean;
+  /** How many actions one turn may play, 1 to 4. Default 1. */
+  maxActions?: number;
+  /** false takes the platform's subgoal tools away. */
+  subgoals?: boolean;
 };
 
 export type StartSessionRequest = {
@@ -124,4 +163,4 @@ export type AgentServerOptions = {
   memoryPath?: string | false;
 };
 
-export type { AttemptRecord, TokenUsage, ToolDescriptor, TurnReport };
+export type { AttemptRecord, Relationship, StepRecord, TokenUsage, ToolDescriptor, TurnReport };

@@ -226,6 +226,17 @@ export class PlatformConnection {
       waiter.resolve(envelope);
       return;
     }
+    // A start the platform refuses (unknown character ID, for one) fails at
+    // once with the platform's reason instead of timing out.
+    if (envelope.type === "error" && envelope.sessionId) {
+      const key = `session:${envelope.sessionId}:start`;
+      const waiter = this.pending.get(key);
+      if (waiter) {
+        this.pending.delete(key);
+        waiter.reject(new Error(envelope.message));
+      }
+      return;
+    }
     if (envelope.type === "session_resumed" || envelope.type === "resume_err") {
       const waiter = this.pending.get(`session:${envelope.sessionId}:resume`);
       if (!waiter) return;
