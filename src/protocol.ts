@@ -3,7 +3,7 @@
  */
 
 export const PROTOCOL_VERSION = 1;
-export const SDK_VERSION = "1.1.0";
+export const SDK_VERSION = "1.2.0";
 
 /** How long a disconnected session can be resumed. Shared by both sides. */
 export const SESSION_RESUME_GRACE_MS = 30_000;

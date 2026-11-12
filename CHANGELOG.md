@@ -1,5 +1,12 @@
 # Changelog
 
+## 1.2.0
+
+### Minor Changes
+
+- Register a tool from a name, description, Zod schema, and callback with `bindDynamic`.
+- `start()` requires `playerId`, the character UUID from the web app. One platform key serves the game, and each session names the character to play.
+
 ## 1.1.0
 
 ### Minor Changes
