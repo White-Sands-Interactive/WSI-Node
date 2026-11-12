@@ -58,6 +58,11 @@ export type AgentHandle = {
 };
 
 export type StartOptions = {
+  /**
+   * Character to play. Copy the id from the Players page.
+   * The platform key belongs to the game; this id selects the character.
+   */
+  playerId: string;
   /** Label stored with the session. Defaults to the class name. */
   name?: string;
   /** Added to the model prompt for this player only. */
@@ -69,6 +74,7 @@ export type StartOptions = {
 export type StartSessionRequest = {
   sessionId: string;
   sessionToken: string;
+  playerId: string;
   name?: string;
   tools: ToolDescriptor[];
   instructions: string;

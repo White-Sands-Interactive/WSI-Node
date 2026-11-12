@@ -40,7 +40,7 @@ Use the same Zod 3 the SDK depends on when you declare argument schemas. Zod 4 o
 
 ## Usage
 
-Set the platform key, then start one agent per character. `turn()` grants that character one chance to act and resolves with what they did.
+Set the platform key, then start one agent per character. The key belongs to the game. `playerId` is the character id from the Players page, and every `start()` sends it. `turn()` grants that character one chance to act and resolves with what they did.
 
 ```sh
 export WSI_PLATFORM_KEY=pk_...
@@ -53,6 +53,7 @@ import { AgentServer } from "@whitesands/agent-player";
 
 const agents = new AgentServer();
 const ada = await agents.start(new Villager(world, "Ada"), {
+  playerId: "3f6c2d1e-8b7a-4c5d-9e0f-1a2b3c4d5e6f",
   name: "Ada",
   goal: "Stand on the tree and chop it",
 });
@@ -138,6 +139,7 @@ import { AgentServer, bindDynamic } from "@whitesands/agent-player";
 import { z } from "zod";
 
 const scout = { n: 1 };
+const playerId = "3f6c2d1e-8b7a-4c5d-9e0f-1a2b3c4d5e6f";
 bindDynamic(scout, "see", "", undefined, () => ({ n: scout.n }));
 bindDynamic(scout, "add", "Add dx", { dx: z.number().int() }, (args) => {
   scout.n += args.dx as number;
@@ -145,7 +147,7 @@ bindDynamic(scout, "add", "Add dx", { dx: z.number().int() }, (args) => {
 });
 
 const agents = new AgentServer();
-const agent = await agents.start(scout);
+const agent = await agents.start(scout, { playerId });
 ```
 
 ### Turns
@@ -197,11 +199,19 @@ try {
 
 ### Several characters
 
-One `AgentServer` hosts every character. Each `start()` is its own session.
+One `AgentServer` and one platform key host every character in the game. Each `start()` is its own session and names that character with `playerId`. The id is a UUID, and it stays the same when the character is renamed. A missing id, a value that is not a UUID, or an id from another game is rejected and no session is created.
 
 ```ts
-const ada = await agents.start(new Villager(world, "Ada"), { name: "Ada", goal: "Chop the tree" });
-const bea = await agents.start(new Villager(world, "Bea"), { name: "Bea", goal: "Carry wood home" });
+const ada = await agents.start(new Villager(world, "Ada"), {
+  playerId: "3f6c2d1e-8b7a-4c5d-9e0f-1a2b3c4d5e6f",
+  name: "Ada",
+  goal: "Chop the tree",
+});
+const bea = await agents.start(new Villager(world, "Bea"), {
+  playerId: "6b1e2a30-0c1d-4e5f-8a9b-0c1d2e3f4a5b",
+  name: "Bea",
+  goal: "Carry wood home",
+});
 
 await ada.turn();
 await bea.turn();
@@ -255,6 +265,7 @@ const agents = new AgentServer({
 
 ```ts
 await agents.start(ferry, {
+  playerId: "3f6c2d1e-8b7a-4c5d-9e0f-1a2b3c4d5e6f",
   name: "Ferryman",
   goal: "Get the wolf, the goat, and the cabbage onto the far bank.",
 });
@@ -262,7 +273,7 @@ await agents.start(ferry, {
 
 ### Testing without a platform
 
-`@whitesands/agent-player/testing` runs the same wait, act, and retry loop in memory. The script is the list of tool calls, in order. No key and no socket.
+`@whitesands/agent-player/testing` runs the same wait, act, and retry loop in memory. The script is the list of tool calls, in order. No key and no socket. `start()` still requires `playerId`.
 
 ```ts
 import { AgentServer } from "@whitesands/agent-player";

@@ -10,6 +10,7 @@ import { PlatformConnection } from "./platform-connection.js";
 import {
   DEFAULT_AGENT_INSTRUCTIONS,
   assertNever,
+  requirePlayerId,
   type Envelope,
   type TurnReport,
 } from "./protocol.js";
@@ -100,7 +101,8 @@ export class AgentServer {
    * Reflect the player into tools, register a session, and return a handle.
    * `turn()` on that handle lets the remote model act once.
    */
-  async start(instance: object, options?: StartOptions): Promise<AgentHandle> {
+  async start(instance: object, options: StartOptions): Promise<AgentHandle> {
+    const playerId = requirePlayerId(options.playerId);
     await this.connect();
 
     const reflected = reflectPlayer(instance);
@@ -140,41 +142,54 @@ export class AgentServer {
     };
     const onEvent = (event: AgentEvent) => this.emit(event);
 
-    if (this.inline) {
-      const [serverTransport, clientTransport] = InMemoryTransport.createLinkedPair();
-      await server.connect(serverTransport);
-      record.transport = serverTransport;
-      this.sessions.set(sessionId, record);
-      await this.inline.startSession({
-        sessionId,
-        sessionToken,
-        name,
-        tools: reflected.tools,
-        instructions,
-        ...(options?.goal ? { goal: options.goal } : {}),
-        ...(this.logger ? { logger: this.logger } : {}),
-        transport: clientTransport,
-        onTurnResult,
-        onEvent,
-      });
-    } else {
-      if (!this.connection) throw new Error("Not connected");
-      const mux = this.connection.createTransport(sessionId);
-      await server.connect(mux);
-      record.transport = mux;
-      record.mux = mux;
-      this.sessions.set(sessionId, record);
-      const started = this.connection.waitForSessionEvent(sessionId, "start");
-      this.connection.send({
-        type: "start_session",
-        sessionId,
-        sessionToken,
-        name,
-        tools: reflected.tools,
-        instructions,
-        ...(options?.goal ? { goal: options.goal } : {}),
-      });
-      await started;
+    this.sessions.set(sessionId, record);
+    try {
+      if (this.inline) {
+        const [serverTransport, clientTransport] = InMemoryTransport.createLinkedPair();
+        await server.connect(serverTransport);
+        record.transport = serverTransport;
+        await this.inline.startSession({
+          sessionId,
+          sessionToken,
+          playerId,
+          name,
+          tools: reflected.tools,
+          instructions,
+          ...(options.goal ? { goal: options.goal } : {}),
+          ...(this.logger ? { logger: this.logger } : {}),
+          transport: clientTransport,
+          onTurnResult,
+          onEvent,
+        });
+      } else {
+        if (!this.connection) throw new Error("Not connected");
+        const mux = this.connection.createTransport(sessionId);
+        await server.connect(mux);
+        record.transport = mux;
+        record.mux = mux;
+        const started = this.connection.waitForSessionEvent(sessionId, "start");
+        try {
+          this.connection.send({
+            type: "start_session",
+            sessionId,
+            sessionToken,
+            playerId,
+            name,
+            tools: reflected.tools,
+            instructions,
+            ...(options.goal ? { goal: options.goal } : {}),
+          });
+          await started;
+        } catch (error) {
+          const wrapped = error instanceof Error ? error : new Error(String(error));
+          this.connection.failSessionEvent(sessionId, "start", wrapped);
+          await started.catch(() => undefined);
+          throw wrapped;
+        }
+      }
+    } catch (error) {
+      await this.stopSession(sessionId);
+      throw error;
     }
 
     return {
@@ -280,6 +295,9 @@ export class AgentServer {
       }
       case "error":
         log(this.logger, "error", envelope.message);
+        if (envelope.sessionId) {
+          this.connection?.failSessionEvent(envelope.sessionId, "start", new Error(envelope.message));
+        }
         return;
       case "session_started":
       case "session_stopped":
