@@ -278,6 +278,9 @@ export class PlatformConnection {
       const sessions = this.handlers.sessions?.() ?? [];
       for (const session of sessions) {
         const resumed = this.waitForSessionEvent(session.sessionId, "resume");
+        // If the send below throws, nothing awaits this promise, and its
+        // timeout must not end the process as an unhandled rejection.
+        resumed.catch(() => {});
         this.send({
           type: "resume_session",
           sessionId: session.sessionId,

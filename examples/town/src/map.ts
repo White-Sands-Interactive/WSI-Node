@@ -213,7 +213,7 @@ function nearestFree(c: number, r: number): { c: number; r: number } | null {
   return null;
 }
 
-const NEIGHBOURS = [[1, 0, 1], [-1, 0, 1], [0, 1, 1], [0, -1, 1], [1, 1, 1.414], [1, -1, 1.414], [-1, 1, 1.414], [-1, -1, 1.414]] as const;
+const NEIGHBOURS = [[1, 0, 1], [-1, 0, 1], [0, 1, 1], [0, -1, 1], [1, 1, Math.SQRT2], [1, -1, Math.SQRT2], [-1, 1, Math.SQRT2], [-1, -1, Math.SQRT2]] as const;
 
 /** A* over the walk grid. Returns waypoints ending at (or next to) the goal, or null. */
 export function findPath(from: Position, to: Position): Position[] | null {
@@ -224,7 +224,10 @@ export function findPath(from: Position, to: Position): Position[] | null {
   if (!start || !goal) return null;
   const startIndex = start.r * COLS + start.c;
   const goalIndex = goal.r * COLS + goal.c;
-  const cost = new Float32Array(COLS * ROWS).fill(Infinity);
+  // Float64 so a stored cost equals the cost that was computed. With a rounded
+  // cost, equal routes look like improvements and cells are reopened without end.
+  const cost = new Float64Array(COLS * ROWS).fill(Infinity);
+  const done = new Uint8Array(COLS * ROWS);
   const parent = new Int32Array(COLS * ROWS).fill(-1);
   const open: { index: number; score: number }[] = [{ index: startIndex, score: 0 }];
   cost[startIndex] = 0;
@@ -234,6 +237,8 @@ export function findPath(from: Position, to: Position): Position[] | null {
     for (let i = 1; i < open.length; i++) if (open[i]!.score < open[bestAt]!.score) bestAt = i;
     const current = open.splice(bestAt, 1)[0]!.index;
     if (current === goalIndex) break;
+    if (done[current]) continue;
+    done[current] = 1;
     const c = current % COLS;
     const r = Math.floor(current / COLS);
     for (const [dc, dr, step] of NEIGHBOURS) {
@@ -241,7 +246,7 @@ export function findPath(from: Position, to: Position): Position[] | null {
       const rr = r + dr;
       if (cc < 0 || rr < 0 || cc >= COLS || rr >= ROWS) continue;
       const next = rr * COLS + cc;
-      if (blocked[next]) continue;
+      if (blocked[next] || done[next]) continue;
       // No cutting corners between two blocked cells.
       if (dc !== 0 && dr !== 0 && (blocked[r * COLS + cc] || blocked[rr * COLS + c])) continue;
       const total = cost[current]! + step;
