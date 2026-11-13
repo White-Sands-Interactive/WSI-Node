@@ -11,7 +11,11 @@ async function main(): Promise<void> {
     ]),
   });
 
-  const agent = await agents.start(nia, { name: "Nia", goal: "Deliver the parcel to the door" });
+  const agent = await agents.start(nia, {
+    playerId: "3f6c2d1e-8b7a-4c5d-9e0f-1a2b3c4d5e6f",
+    name: "Nia",
+    goal: "Deliver the parcel to the door",
+  });
   const walked = await agent.turn();
   const delivered = await agent.turn();
   console.log(walked.action, walked.args, "->", walked.result);

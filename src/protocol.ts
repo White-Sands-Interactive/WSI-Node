@@ -3,7 +3,7 @@
  */
 
 export const PROTOCOL_VERSION = 1;
-export const SDK_VERSION = "1.2.0";
+export const SDK_VERSION = "1.3.0";
 
 /** How long a disconnected session can be resumed. Shared by both sides. */
 export const SESSION_RESUME_GRACE_MS = 30_000;
@@ -87,11 +87,12 @@ export type Envelope =
       type: "start_session";
       sessionId: string;
       sessionToken: string;
+      /** Character id. One platform key can start every character in that game. */
+      playerId: string;
       tools: ToolDescriptor[];
       instructions: string;
       goal?: string;
       name?: string;
-      playerId?: string;
       memory?: boolean;
       maxActions?: number;
       subgoals?: boolean;
@@ -167,6 +168,20 @@ export const DEFAULT_AGENT_INSTRUCTIONS = [
   "The view's done list is what this character has already called in this session, oldest first. Use it when choosing the next action.",
   "If an action tool returns an error, retry once with a corrected action. A second failure ends the turn as failed.",
 ].join("\n");
+
+const PLAYER_ID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+/** Trim and check the character id `start_session` must send. */
+export function requirePlayerId(value: string | undefined): string {
+  const id = value?.trim() ?? "";
+  if (id.length === 0) {
+    throw new Error("playerId is required. Copy the character ID from the web app");
+  }
+  if (!PLAYER_ID.test(id)) {
+    throw new Error(`playerId "${id}" is not a character ID. Copy the ID from the character in the web app`);
+  }
+  return id;
+}
 
 export function assertNever(value: never): never {
   throw new Error(`Unhandled protocol message: ${JSON.stringify(value)}`);

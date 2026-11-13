@@ -4,7 +4,7 @@ import { Ferryman, render } from "./ferry.js";
 
 /**
  * River-crossing demo. Offline by default, replaying one solution.
- * Remote: PLATFORM_KEY=pk_... npm start -- --remote
+ * Remote: PLATFORM_KEY=pk_... PLAYER_ID=<uuid> npm start -- --remote
  *
  * Each turn the model chooses who rides. Taking the wrong passenger leaves
  * the wolf with the goat, or the goat with the cabbage, and the trip is refused.
@@ -37,7 +37,11 @@ async function main(): Promise<void> {
         ),
       });
 
-  const agent = await agents.start(ferry, { name: "Ferryman", goal: GOAL });
+  const agent = await agents.start(ferry, {
+    playerId: useRemote ? required("PLAYER_ID") : "3f6c2d1e-8b7a-4c5d-9e0f-1a2b3c4d5e6f",
+    name: "Ferryman",
+    goal: GOAL,
+  });
   const limit = useRemote ? 12 : SOLUTION.length;
 
   for (let turn = 1; turn <= limit && !ferry.see().solved; turn += 1) {

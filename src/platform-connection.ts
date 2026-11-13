@@ -115,6 +115,15 @@ export class PlatformConnection {
     });
   }
 
+  /** Reject a start, stop, or resume wait. No-op when nothing is waiting. */
+  failSessionEvent(sessionId: string, kind: "start" | "stop" | "resume", error: Error): void {
+    const key = `session:${sessionId}:${kind}`;
+    const waiter = this.pending.get(key);
+    if (!waiter) return;
+    this.pending.delete(key);
+    waiter.reject(error);
+  }
+
   createTransport(sessionId: string): SessionMuxTransport {
     return new SessionMuxTransport(sessionId, (envelope) => this.send(envelope));
   }

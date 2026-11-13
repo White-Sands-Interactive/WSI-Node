@@ -22,7 +22,7 @@ const pawn = new Pawn();
 const agents = new AgentServer({
   inline: createTestPlatform([{ name: "move", arguments: { dx: 2 } }]),
 });
-const agent = await agents.start(pawn);
+const agent = await agents.start(pawn, { playerId: "3f6c2d1e-8b7a-4c5d-9e0f-1a2b3c4d5e6f" });
 const result = await agent.turn();
 if (result.action !== "move" || pawn.x !== 2) {
   throw new Error("packed SDK did not run a turn");

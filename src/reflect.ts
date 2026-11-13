@@ -31,6 +31,17 @@ export type ReflectedPlayer = {
 
 const SKIP = new Set(["constructor"]);
 
+type DynamicCallback = (args: Record<string, unknown>) => unknown | Promise<unknown>;
+
+type DynamicBinding = {
+  name: string;
+  description: string;
+  args?: ZodRawShape;
+  callback: DynamicCallback;
+};
+
+const dynamicTools = new WeakMap<object, Map<string, DynamicBinding>>();
+
 export const SEE_DESCRIPTION = "Read the current game view for this player. Prefer wait, which returns this after the game grants a turn.";
 export const WAIT_DESCRIPTION = "Block until the game calls turn() for this session, then return the current see() view.";
 
@@ -90,6 +101,75 @@ function formatZodError(error: z.ZodError): string {
     .join("; ");
 }
 
+function rejectDynamicName(name: string): void {
+  if (name.length === 0 || name === "wait" || name.startsWith("_")) {
+    throw new Error(`cannot publish action "${name}"`);
+  }
+}
+
+function dynamicBindings(player: object): Map<string, DynamicBinding> {
+  return dynamicTools.get(player) ?? new Map();
+}
+
+/**
+ * Register one tool from data. `see` is allowed. `wait`, an empty name, a name
+ * starting with `_`, and a missing callback are not. An empty description
+ * becomes `Action: {name}`. The same name replaces the previous tool.
+ * Arguments are checked the same way as a declared method before the callback runs.
+ */
+export function bindDynamic(
+  player: object,
+  name: string,
+  description: string,
+  args: ZodRawShape | undefined,
+  callback?: DynamicCallback,
+): void {
+  rejectDynamicName(name);
+  if (typeof callback !== "function") {
+    throw new Error(`cannot publish action "${name}"`);
+  }
+  const shape = args && Object.keys(args).length > 0 ? { ...args } : undefined;
+  let tools = dynamicTools.get(player);
+  if (!tools) {
+    tools = new Map();
+    dynamicTools.set(player, tools);
+  }
+  tools.set(name, {
+    name,
+    description: description.length > 0 ? description : `Action: ${name}`,
+    ...(shape ? { args: shape } : {}),
+    callback,
+  });
+}
+
+function buildDynamicTool(binding: DynamicBinding): PlayerTool {
+  const shape = binding.args;
+  const paramNames = shape ? Object.keys(shape) : [];
+  const argsSchema = shape ? z.object(shape) : undefined;
+  const inputSchema: JsonSchema = argsSchema
+    ? toJsonSchema(argsSchema)
+    : { type: "object", properties: {} };
+
+  return {
+    name: binding.name,
+    description: binding.description,
+    paramNames,
+    ...(argsSchema ? { argsSchema } : {}),
+    descriptor: { name: binding.name, description: binding.description, inputSchema },
+    async invoke(args: Record<string, unknown>) {
+      let parsed: Record<string, unknown> = {};
+      if (argsSchema) {
+        const result = argsSchema.safeParse(args ?? {});
+        if (!result.success) {
+          throw new Error(formatZodError(result.error));
+        }
+        parsed = result.data as Record<string, unknown>;
+      }
+      return await Promise.resolve(binding.callback(parsed));
+    },
+  };
+}
+
 function buildTool(
   instance: object,
   name: string,
@@ -134,15 +214,17 @@ function buildTool(
 
 /**
  * Publish tools from a player instance.
- * - `see` is the state tool (required).
+ * - `see` is the state tool (required), from a method or `bindDynamic`.
  * - Every other public method is an action tool.
  * - Names starting with `_` and the constructor are skipped.
  * - `static agent` supplies descriptions and zod argument schemas. Undeclared methods stay tools,
  *   with unconstrained JSON arguments (no type guessed from the parameter name).
+ * - `bindDynamic` adds or replaces a tool when the action is data rather than a method.
  */
 export function reflectPlayer(instance: object): ReflectedPlayer {
   const names = collectMethodNames(instance);
-  if (!names.includes("see")) {
+  const dynamic = dynamicBindings(instance);
+  if (!names.includes("see") && !dynamic.has("see")) {
     throw new Error("Player must implement a public see() method");
   }
 
@@ -150,18 +232,24 @@ export function reflectPlayer(instance: object): ReflectedPlayer {
   const declared = metadata?.actions ?? {};
   const className = instance.constructor?.name || "Player";
   for (const name of Object.keys(declared)) {
-    if (!names.includes(name) || name === "see") {
+    if (name === "see" || (!names.includes(name) && !dynamic.has(name))) {
       throw new Error(`Declared action "${name}" is not a public method on ${className}`);
     }
   }
 
-  const see = buildTool(instance, "see", SEE_DESCRIPTION);
-  const actionNames = names.filter((name) => name !== "see");
-  const actions = actionNames.map((name) => {
+  const dynamicSee = dynamic.get("see");
+  const see = dynamicSee ? buildDynamicTool(dynamicSee) : buildTool(instance, "see", SEE_DESCRIPTION);
+  const actions: PlayerTool[] = [];
+  for (const name of names) {
+    if (name === "see" || dynamic.has(name)) continue;
     const spec = declared[name];
     const description = spec?.description ?? `Action: ${name}`;
-    return buildTool(instance, name, description, spec);
-  });
+    actions.push(buildTool(instance, name, description, spec));
+  }
+  for (const [name, binding] of dynamic) {
+    if (name === "see") continue;
+    actions.push(buildDynamicTool(binding));
+  }
 
   const wait: ToolDescriptor = {
     name: "wait",

@@ -5,7 +5,7 @@ import { Villager } from "./villager.js";
 
 /**
  * Forest demo. Offline by default, using the testing entry's scripted platform.
- * Remote: PLATFORM_KEY=pk_... npm start -- --remote
+ * Remote: PLATFORM_KEY=pk_... ADA_PLAYER_ID=<uuid> BEA_PLAYER_ID=<uuid> npm start -- --remote
  */
 async function main(): Promise<void> {
   const useRemote = process.argv.includes("--remote");
@@ -29,8 +29,13 @@ async function main(): Promise<void> {
         ]),
       });
 
-  const adaAgent = await agents.start(ada, { goal: "Stand on the tree and chop it" });
-  const beaAgent = await agents.start(bea);
+  const adaAgent = await agents.start(ada, {
+    playerId: useRemote ? required("ADA_PLAYER_ID") : "3f6c2d1e-8b7a-4c5d-9e0f-1a2b3c4d5e6f",
+    goal: "Stand on the tree and chop it",
+  });
+  const beaAgent = await agents.start(bea, {
+    playerId: useRemote ? required("BEA_PLAYER_ID") : "6b1e2a30-0c1d-4e5f-8a9b-0c1d2e3f4a5b",
+  });
 
   const moved = await adaAgent.turn();
   console.log(`\nAda ${moved.action}(${JSON.stringify(moved.args)})`);

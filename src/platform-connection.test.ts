@@ -14,7 +14,10 @@ type FakePlatform = {
 };
 
 /** Speaks the connection-level protocol only; turns are answered by the test. */
-async function fakePlatform(helloErr?: { code: "AUTH" | "PROTOCOL"; message: string }): Promise<FakePlatform> {
+async function fakePlatform(
+  helloErr?: { code: "AUTH" | "PROTOCOL"; message: string },
+  startError?: string,
+): Promise<FakePlatform> {
   const wss = new WebSocketServer({ port: 0, host: "127.0.0.1" });
   await new Promise<void>((resolve) => wss.once("listening", () => resolve()));
   const received: Envelope[] = [];
@@ -32,7 +35,8 @@ async function fakePlatform(helloErr?: { code: "AUTH" | "PROTOCOL"; message: str
           else reply({ type: "hello_ok", accountName: "fake", protocolVersion: PROTOCOL_VERSION });
           return;
         case "start_session":
-          reply({ type: "session_started", sessionId: envelope.sessionId });
+          if (startError) reply({ type: "error", sessionId: envelope.sessionId, message: startError });
+          else reply({ type: "session_started", sessionId: envelope.sessionId });
           return;
         case "resume_session":
           reply({ type: "session_resumed", sessionId: envelope.sessionId });
@@ -63,6 +67,8 @@ async function fakePlatform(helloErr?: { code: "AUTH" | "PROTOCOL"; message: str
   };
 }
 
+const ADA = "3f6c2d1e-8b7a-4c5d-9e0f-1a2b3c4d5e6f";
+
 class Pawn {
   see() {
     return {};
@@ -91,13 +97,13 @@ describe("platform connection", () => {
   it("sends the protocol version and maps hello_err codes to typed errors", async () => {
     platform = await fakePlatform({ code: "PROTOCOL", message: "upgrade" });
     const outdated = new AgentServer({ platformKey: "pk_test", platformUrl: platform.url });
-    await expect(outdated.start(new Pawn())).rejects.toBeInstanceOf(ProtocolVersionError);
+    await expect(outdated.start(new Pawn(), { playerId: ADA })).rejects.toBeInstanceOf(ProtocolVersionError);
     expect(platform.received[0]).toMatchObject({ type: "hello", protocolVersion: PROTOCOL_VERSION });
     await platform.close();
 
     platform = await fakePlatform({ code: "AUTH", message: "bad key" });
     const unauthorized = new AgentServer({ platformKey: "pk_wrong", platformUrl: platform.url });
-    await expect(unauthorized.start(new Pawn())).rejects.toBeInstanceOf(PlatformAuthError);
+    await expect(unauthorized.start(new Pawn(), { playerId: ADA })).rejects.toBeInstanceOf(PlatformAuthError);
   });
 
   it("reconnects, resumes with the session token, and finishes the turn on the new socket", async () => {
@@ -108,9 +114,10 @@ describe("platform connection", () => {
       platformUrl: platform.url,
       onEvent: (event) => events.push(event.type),
     });
-    const agent = await agents.start(new Pawn(), { goal: "Step" });
+    const agent = await agents.start(new Pawn(), { playerId: `  ${ADA}  `, goal: "Step" });
     const started = platform.received.find((envelope) => envelope.type === "start_session");
     if (started?.type !== "start_session") throw new Error("no start_session");
+    expect(started.playerId).toBe(ADA);
     expect(started.goal).toBe("Step");
 
     platform.sockets[0]!.terminate();
@@ -141,6 +148,15 @@ describe("platform connection", () => {
       attempts: 1,
       usage: { promptTokens: 3, completionTokens: 2 },
     });
+    await agents.close();
+  });
+
+  it("rejects start when the platform reports an unknown character", async () => {
+    const message = `No character with ID ${ADA} for this game. Characters available: Inspector (6b1e2a30-0c1d-4e5f-8a9b-0c1d2e3f4a5b)`;
+    platform = await fakePlatform(undefined, message);
+    const agents = new AgentServer({ platformKey: "pk_test", platformUrl: platform.url });
+    await expect(agents.start(new Pawn(), { playerId: ADA })).rejects.toThrow(message);
+    expect(platform.received.some((envelope) => envelope.type === "stop_session")).toBe(true);
     await agents.close();
   });
 });
