@@ -894,9 +894,13 @@ canvas.addEventListener("pointerdown", (event) => {
 });
 
 // ---------------------------------------------------------------- network
-function connect(name) {
+function connect(name, code) {
+  if (socket && socket.readyState <= 1) {
+    sendMessage({ t: "join", name, code });
+    return;
+  }
   socket = new WebSocket(`${location.protocol === "https:" ? "wss" : "ws"}://${location.host}`);
-  socket.onopen = () => sendMessage({ t: "join", name });
+  socket.onopen = () => sendMessage({ t: "join", name, code });
   socket.onclose = () => {
     if (me) toast("Connection lost. Reload to come back.", "bad");
   };
@@ -951,6 +955,10 @@ function connect(name) {
       setTimeout(() => {
         if ((emotes.get(message.name)?.until ?? 0) <= performance.now()) emotes.delete(message.name);
       }, 2700);
+    } else if (message.t === "denied") {
+      toast("That passcode is not right.", "bad");
+      $("join-code").value = "";
+      $("join-code").focus();
     } else if (message.t === "full") {
       toast("The town is full right now. Try again in a bit.", "bad");
     }
@@ -959,5 +967,18 @@ function connect(name) {
 
 $("join-form").onsubmit = (event) => {
   event.preventDefault();
-  connect($("join-name").value.trim() || "Visitor");
+  connect($("join-name").value.trim() || "Visitor", $("join-code").value.trim());
 };
+
+// The town may ask visitors for a passcode. A link ending in #code fills it in;
+// the part after # is never sent to the server in the page request.
+fetch("/health")
+  .then((response) => response.json())
+  .then((health) => {
+    if (!health.passcode) return;
+    $("join-code").classList.remove("hidden");
+    $("join-code").required = true;
+    const fromLink = decodeURIComponent(location.hash.slice(1));
+    if (fromLink) $("join-code").value = fromLink;
+  })
+  .catch(() => {});

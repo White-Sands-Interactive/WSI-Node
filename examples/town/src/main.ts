@@ -12,6 +12,7 @@
  */
 import { createReadStream, existsSync } from "node:fs";
 import { createServer } from "node:http";
+import { createHash, timingSafeEqual } from "node:crypto";
 import { dirname, extname, join, normalize } from "node:path";
 import { fileURLToPath } from "node:url";
 import { AgentServer, World } from "@whitesands/agent-player";
@@ -24,6 +25,15 @@ const PORT = Number(process.env.PORT ?? 8080);
 const SECONDS_PER_GAME_HOUR = 45;
 const START_HOUR = 8;
 const MAX_VISITORS = 12;
+// When set, a visitor must give this passcode to join. Residents run either way.
+const PASSCODE = (process.env.TOWN_PASSCODE ?? "").trim();
+const MAX_PASSCODE_TRIES = 5;
+
+function passcodeMatches(given: unknown): boolean {
+  const a = createHash("sha256").update(String(given ?? "").trim()).digest();
+  const b = createHash("sha256").update(PASSCODE).digest();
+  return timingSafeEqual(a, b);
+}
 const MAX_ITEMS = 6;
 const PUBLIC_DIR = join(dirname(fileURLToPath(import.meta.url)), "..", "public");
 
@@ -130,7 +140,7 @@ const http = createServer((request, response) => {
   const path = normalize(decodeURIComponent((request.url ?? "/").split("?")[0] ?? "/")).replace(/^(\.\.[/\\])+/, "");
   if (path === "/health") {
     response.writeHead(200, { "Content-Type": "application/json" });
-    response.end(JSON.stringify({ ok: true, residents: world.characters.size, visitors: visitors.size, turns: world.turnsUsed }));
+    response.end(JSON.stringify({ ok: true, residents: world.characters.size, visitors: visitors.size, turns: world.turnsUsed, passcode: PASSCODE !== "" }));
     return;
   }
   const file = join(PUBLIC_DIR, path === "/" ? "index.html" : path);
@@ -159,6 +169,7 @@ function near(visitor: Visitor, name: string, range: number): boolean {
 }
 
 sockets.on("connection", (socket) => {
+  let wrongCodes = 0;
   socket.on("message", (raw) => {
     let message: Record<string, unknown>;
     try {
@@ -168,6 +179,12 @@ sockets.on("connection", (socket) => {
     }
     let visitor = visitors.get(socket);
     if (message.t === "join" && !visitor) {
+      if (PASSCODE && !passcodeMatches(message.code)) {
+        wrongCodes += 1;
+        send(socket, { t: "denied" });
+        if (wrongCodes >= MAX_PASSCODE_TRIES) socket.close();
+        return;
+      }
       if (visitors.size >= MAX_VISITORS) {
         send(socket, { t: "full" });
         return;
