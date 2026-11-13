@@ -12,6 +12,7 @@ import {
   assertNever,
   requirePlayerId,
   type Envelope,
+  type Relationship,
   type TurnReport,
 } from "./protocol.js";
 import { reflectPlayer } from "./reflect.js";
@@ -41,6 +42,8 @@ type SessionRecord = {
   transport: Transport;
   mux?: SessionMuxTransport;
   listeners: Set<EventListener>;
+  memory: boolean;
+  relationships: Map<string, Relationship>;
 };
 
 /**
@@ -110,7 +113,7 @@ export class AgentServer {
     const sessionToken = randomUUID();
     const gate = new TurnGate();
     const name = options?.name ?? instance.constructor?.name ?? "player";
-    const memory = this.actionMemory();
+    const memory = options?.memory ? null : this.actionMemory();
     const server = createSessionMcpServer(reflected, gate, {
       name: `agent-player:${name}`,
       ...(memory
@@ -122,7 +125,10 @@ export class AgentServer {
           }
         : {}),
     });
-    const instructions = [this.options.instructions ?? DEFAULT_AGENT_INSTRUCTIONS, options?.instructions]
+    const instructions = [
+      options?.ownInstructions ? undefined : this.options.instructions ?? DEFAULT_AGENT_INSTRUCTIONS,
+      options?.instructions,
+    ]
       .filter((part): part is string => Boolean(part && part.length > 0))
       .join("\n\n");
 
@@ -135,6 +141,8 @@ export class AgentServer {
       server,
       transport: undefined as unknown as Transport,
       listeners,
+      memory: options?.memory === true,
+      relationships: new Map(),
     };
 
     const onTurnResult = (result: TurnReport) => {
@@ -178,8 +186,16 @@ export class AgentServer {
             tools: reflected.tools,
             instructions,
             ...(options.goal ? { goal: options.goal } : {}),
+            ...(options.memory ? { memory: true } : {}),
+            ...(options.maxActions ? { maxActions: options.maxActions } : {}),
+            ...(options.subgoals === false ? { subgoals: false } : {}),
           });
-          await started;
+          const ack = await started;
+          if (ack.type === "session_started") {
+            for (const relationship of ack.relationships ?? []) {
+              record.relationships.set(relationship.about.toLowerCase(), relationship);
+            }
+          }
         } catch (error) {
           const wrapped = error instanceof Error ? error : new Error(String(error));
           this.connection.failSessionEvent(sessionId, "start", wrapped);
@@ -200,6 +216,15 @@ export class AgentServer {
         listeners.add(listener);
         return () => listeners.delete(listener);
       },
+      observe: (text: string, about?: string) => {
+        if (!record.memory || !text || !this.connection || !this.sessions.has(sessionId)) return;
+        try {
+          this.connection.send({ type: "observe", sessionId, text, ...(about ? { about } : {}) });
+        } catch {
+          // The event is lost while the connection is down.
+        }
+      },
+      relationships: () => Object.fromEntries(record.relationships),
     };
   }
 
@@ -235,6 +260,7 @@ export class AgentServer {
       result: outcome.result,
       attempts: outcome.attempts ?? 1,
       usage: outcome.usage ?? { promptTokens: 0, completionTokens: 0 },
+      ...(outcome.steps ? { steps: outcome.steps } : {}),
     };
   }
 
@@ -284,6 +310,33 @@ export class AgentServer {
           });
           return;
         }
+        if (envelope.event === "relationship" || envelope.event === "memory") {
+          if (envelope.error) return;
+          const args = envelope.args ?? {};
+          const about = typeof args.about === "string" ? args.about : "";
+          if (envelope.event === "memory") {
+            this.emit({ type: "memory", sessionId: envelope.sessionId, about, note: String(args.note ?? "") });
+            return;
+          }
+          const relationship: Relationship = {
+            about,
+            affinity: Number(args.affinity ?? 0),
+            label: String(args.label ?? "stranger"),
+            note: String(args.because ?? ""),
+          };
+          this.sessions.get(envelope.sessionId)?.relationships.set(about.toLowerCase(), relationship);
+          this.emit({
+            type: "relationship",
+            sessionId: envelope.sessionId,
+            about,
+            affinity: relationship.affinity,
+            label: relationship.label,
+            change: Number(args.change ?? 0),
+            because: relationship.note ?? "",
+          });
+          return;
+        }
+        if (envelope.event !== "turnFailed") return;
         this.emit({
           type: "turnFailed",
           sessionId: envelope.sessionId,
@@ -311,6 +364,7 @@ export class AgentServer {
       case "ping":
       case "pong":
       case "resume_session":
+      case "observe":
         return;
       default: {
         assertNever(envelope);

@@ -235,6 +235,17 @@ export class PlatformConnection {
       waiter.resolve(envelope);
       return;
     }
+    // A start the platform refuses (unknown character ID, for one) fails at
+    // once with the platform's reason instead of timing out.
+    if (envelope.type === "error" && envelope.sessionId) {
+      const key = `session:${envelope.sessionId}:start`;
+      const waiter = this.pending.get(key);
+      if (waiter) {
+        this.pending.delete(key);
+        waiter.reject(new Error(envelope.message));
+      }
+      return;
+    }
     if (envelope.type === "session_resumed" || envelope.type === "resume_err") {
       const waiter = this.pending.get(`session:${envelope.sessionId}:resume`);
       if (!waiter) return;
@@ -276,6 +287,9 @@ export class PlatformConnection {
       const sessions = this.handlers.sessions?.() ?? [];
       for (const session of sessions) {
         const resumed = this.waitForSessionEvent(session.sessionId, "resume");
+        // If the send below throws, nothing awaits this promise, and its
+        // timeout must not end the process as an unhandled rejection.
+        resumed.catch(() => {});
         this.send({
           type: "resume_session",
           sessionId: session.sessionId,

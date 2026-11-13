@@ -3,7 +3,7 @@
  */
 
 export const PROTOCOL_VERSION = 1;
-export const SDK_VERSION = "1.2.0";
+export const SDK_VERSION = "1.3.0";
 
 /** How long a disconnected session can be resumed. Shared by both sides. */
 export const SESSION_RESUME_GRACE_MS = 30_000;
@@ -44,9 +44,26 @@ export type TurnReport = {
   attemptDetails?: AttemptRecord[];
   usage?: TokenUsage;
   connectionLost?: boolean;
+  /** Every action played, when the turn played more than one. */
+  steps?: StepRecord[];
 };
 
-export type SessionEventName = "action" | "retry" | "turnFailed";
+export type StepRecord = {
+  action: string;
+  args: Record<string, unknown>;
+  result?: unknown;
+  error?: string;
+};
+
+/** How a character feels about one person. affinity runs from -100 to 100. */
+export type Relationship = {
+  about: string;
+  affinity: number;
+  label: string;
+  note?: string;
+};
+
+export type SessionEventName = "action" | "retry" | "turnFailed" | "subgoal" | "memory" | "relationship";
 
 export type Envelope =
   | {
@@ -76,10 +93,20 @@ export type Envelope =
       instructions: string;
       goal?: string;
       name?: string;
+      memory?: boolean;
+      maxActions?: number;
+      subgoals?: boolean;
     }
   | {
       type: "session_started";
       sessionId: string;
+      relationships?: Relationship[];
+    }
+  | {
+      type: "observe";
+      sessionId: string;
+      text: string;
+      about?: string;
     }
   | {
       type: "stop_session";
