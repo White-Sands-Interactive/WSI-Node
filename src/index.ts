@@ -18,4 +18,6 @@ export type {
   TurnOptions,
   TurnResult,
 } from "./types.js";
-export type { AttemptRecord, TokenUsage } from "./protocol.js";
+export type { AttemptRecord, Relationship, StepRecord, TokenUsage } from "./protocol.js";
+export { World, Character } from "./world.js";
+export type { Activity, Body, Position, WorldEvent, WorldOptions } from "./world.js";

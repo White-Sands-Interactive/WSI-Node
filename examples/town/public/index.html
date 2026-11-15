@@ -1,0 +1,48 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Sandy Shores</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Fredoka:wght@400;500;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<canvas id="game"></canvas>
+
+<div id="join" class="overlay">
+  <div class="card">
+    <h1>Sandy Shores</h1>
+    <p>A small beach town where everyone has a life of their own. Walk around, say hello, make friends.</p>
+    <form id="join-form">
+      <input id="join-name" maxlength="16" placeholder="Your name" autocomplete="off" autofocus>
+      <input id="join-code" class="hidden" type="password" maxlength="64" placeholder="Passcode" autocomplete="off">
+      <button type="submit">Visit the town</button>
+    </form>
+    <p class="hint">Click to walk. Click a resident to talk. Residents are AI characters and remember you.</p>
+  </div>
+</div>
+
+<aside id="people" class="panel hidden">
+  <h2>Sandy Shores</h2>
+  <div id="clock"></div>
+  <div id="rows"></div>
+  <div id="bag"></div>
+</aside>
+
+<div id="toasts"></div>
+<div id="feed" class="panel hidden"></div>
+
+<div id="bar" class="panel hidden">
+  <div class="bar-head"><span id="bar-title"></span><button id="bar-close" title="Leave the conversation">×</button></div>
+  <form id="say-form"><input id="say" maxlength="200" placeholder="Say something…" autocomplete="off"></form>
+  <div class="row"><span>Do</span><div id="gestures"></div></div>
+  <div class="row"><span>Invite</span><div id="invites"></div></div>
+  <div class="row"><span>Give</span><div id="gives"></div></div>
+</div>
+
+<button id="use" class="hidden"></button>
+<script src="client.js"></script>
+</body>
+</html>

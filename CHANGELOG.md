@@ -1,5 +1,15 @@
 # Changelog
 
+## 1.3.0
+
+- `start()` takes `memory`, `maxActions`, `subgoals` and `ownInstructions`.
+- With `memory: true` the platform keeps the character's memory and relationships. `handle.observe(text, about)` adds an event without a turn, `handle.relationships()` reads how it feels about people, and `memory` and `relationship` events are emitted.
+- `TurnResult.steps` lists every action when a turn played more than one.
+- `World`: describe places, things and characters once; it builds each character's view and standard actions, carries speech, and decides when a character gets a turn. Port of `WSI.World` from the Luau SDK.
+- `examples/town`: Sandy Shores as a browser game on `World`.
+- A refused `start_session` now rejects `start()` with the platform's reason instead of timing out.
+- A reconnect that fails part-way can no longer end the process with an unhandled "Timed out waiting for session resume".
+
 ## 1.2.0
 
 ### Minor Changes
