@@ -17,6 +17,7 @@ type FakePlatform = {
 async function fakePlatform(
   helloErr?: { code: "AUTH" | "PROTOCOL"; message: string },
   startError?: string,
+  forgetsSessions = false,
 ): Promise<FakePlatform> {
   const wss = new WebSocketServer({ port: 0, host: "127.0.0.1" });
   await new Promise<void>((resolve) => wss.once("listening", () => resolve()));
@@ -39,7 +40,8 @@ async function fakePlatform(
           else reply({ type: "session_started", sessionId: envelope.sessionId });
           return;
         case "resume_session":
-          reply({ type: "session_resumed", sessionId: envelope.sessionId });
+          if (forgetsSessions) reply({ type: "resume_err", sessionId: envelope.sessionId, message: "Session cannot be resumed" });
+          else reply({ type: "session_resumed", sessionId: envelope.sessionId });
           return;
         case "stop_session":
           reply({ type: "session_stopped", sessionId: envelope.sessionId });
@@ -183,6 +185,32 @@ describe("platform connection", () => {
       usage: { promptTokens: 1, completionTokens: 1 },
     });
     await expect(replay).resolves.toMatchObject({ action: "move" });
+    await agents.close();
+  });
+
+  it("ends a session the platform forgot after a restart, without reconnecting again", async () => {
+    platform = await fakePlatform(undefined, undefined, true);
+    const events: string[] = [];
+    const agents = new AgentServer({
+      platformKey: "pk_test",
+      platformUrl: platform.url,
+      onEvent: (event) => events.push(event.type),
+    });
+    const agent = await agents.start(new Pawn(), { playerId: ADA });
+    const turn = agent.turn({ timeoutMs: 5_000 });
+
+    platform.sockets[0]!.terminate();
+    await expect(turn).rejects.toBeInstanceOf(SessionEndedError);
+    await waitFor(() => events.includes("reconnected"));
+    expect(events).toContain("sessionEnded");
+    await expect(agent.turn({ timeoutMs: 5_000 })).rejects.toBeInstanceOf(SessionEndedError);
+
+    // The connection stays up: no further sockets after the one reconnect.
+    await new Promise((resolve) => setTimeout(resolve, 600));
+    expect(platform.sockets).toHaveLength(2);
+
+    const next = await agents.start(new Pawn(), { playerId: ADA });
+    expect(next.sessionId).not.toBe(agent.sessionId);
     await agents.close();
   });
 

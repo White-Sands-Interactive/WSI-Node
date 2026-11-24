@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
 import WebSocket from "ws";
-import { ConnectionLostError, PlatformAuthError, ProtocolVersionError } from "./errors.js";
+import { ConnectionLostError, PlatformAuthError, ProtocolVersionError, SessionEndedError } from "./errors.js";
 import type { Logger } from "./logger.js";
 import { log } from "./logger.js";
 import {
@@ -21,6 +21,8 @@ export type PlatformConnectionHandlers = {
   onDisconnect?: () => void;
   onReconnect?: () => void;
   onError?: (error: Error) => void;
+  /** The platform refused to resume a session after a reconnect: it no longer has it. */
+  onSessionLost?: (sessionId: string, message: string) => void;
   sessions?: () => ResumableSession[];
 };
 
@@ -213,6 +215,8 @@ export class PlatformConnection {
       });
 
       ws.on("close", () => {
+        // A socket that was already replaced must not start another reconnect.
+        if (settled && this.ws !== ws) return;
         this.stopHeartbeat();
         if (this.ws === ws) this.ws = null;
         if (!settled) fail(new Error("platform connection closed before hello"));
@@ -251,7 +255,7 @@ export class PlatformConnection {
       if (!waiter) return;
       this.pending.delete(`session:${envelope.sessionId}:resume`);
       if (envelope.type === "resume_err") {
-        waiter.reject(new ConnectionLostError(envelope.message));
+        waiter.reject(new SessionEndedError(envelope.message));
         return;
       }
       waiter.resolve(envelope);
@@ -295,12 +299,24 @@ export class PlatformConnection {
           sessionId: session.sessionId,
           sessionToken: session.sessionToken,
         });
-        await resumed;
+        try {
+          await resumed;
+        } catch (error) {
+          // The platform restarted or let the session expire. The connection
+          // is fine; only this session is gone, and the game can start a new one.
+          if (!(error instanceof SessionEndedError)) throw error;
+          this.handlers.onSessionLost?.(session.sessionId, error.message);
+        }
       }
       this.handlers.onReconnect?.();
     } catch (error) {
       this.reconnecting = false;
       if (this.closed) return;
+      // Drop the socket this attempt opened before trying again.
+      const stale = this.ws;
+      this.ws = null;
+      this.stopHeartbeat();
+      stale?.terminate();
       const wrapped = error instanceof Error ? error : new Error(String(error));
       if (wrapped instanceof PlatformAuthError || wrapped instanceof ProtocolVersionError) {
         this.closed = true;

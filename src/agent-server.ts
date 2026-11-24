@@ -89,6 +89,7 @@ export class AgentServer {
       onEnvelope: (envelope) => this.handleEnvelope(envelope),
       onDisconnect: () => this.emit({ type: "disconnected" }),
       onReconnect: () => this.emit({ type: "reconnected" }),
+      onSessionLost: (sessionId, message) => this.endSession(sessionId, message),
       onError: (error) => {
         log(this.logger, "error", error.message);
         if (error instanceof ConnectionLostError) this.failInflight(error);
