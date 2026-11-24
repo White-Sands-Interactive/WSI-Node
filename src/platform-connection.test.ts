@@ -2,7 +2,7 @@ import type { AddressInfo } from "node:net";
 import { afterEach, describe, expect, it } from "vitest";
 import { WebSocketServer, type WebSocket } from "ws";
 import { AgentServer } from "./agent-server.js";
-import { PlatformAuthError, ProtocolVersionError } from "./errors.js";
+import { PlatformAuthError, ProtocolVersionError, SessionEndedError } from "./errors.js";
 import { PROTOCOL_VERSION, type Envelope } from "./protocol.js";
 
 type FakePlatform = {
@@ -148,6 +148,41 @@ describe("platform connection", () => {
       attempts: 1,
       usage: { promptTokens: 3, completionTokens: 2 },
     });
+    await agents.close();
+  });
+
+  it("fails the turn in flight and later turns when the platform ends the session", async () => {
+    platform = await fakePlatform();
+    const events: { type: string; error?: string }[] = [];
+    const agents = new AgentServer({ platformKey: "pk_test", platformUrl: platform.url });
+    const agent = await agents.start(new Pawn(), { playerId: ADA });
+    agent.on((event) => events.push(event as { type: string; error?: string }));
+
+    const turn = agent.turn({ timeoutMs: 5_000 });
+    platform.send({ type: "session_stopped", sessionId: agent.sessionId, error: "model request failed (503)" });
+    await expect(turn).rejects.toBeInstanceOf(SessionEndedError);
+    await expect(turn).rejects.toThrow("model request failed (503)");
+    expect(events).toContainEqual({ type: "sessionEnded", sessionId: agent.sessionId, error: "model request failed (503)" });
+
+    // A later turn fails at once instead of waiting out the timeout.
+    const started = Date.now();
+    await expect(agent.turn({ timeoutMs: 5_000 })).rejects.toBeInstanceOf(SessionEndedError);
+    expect(Date.now() - started).toBeLessThan(1_000);
+
+    // A new session for the same character plays normally.
+    const next = await agents.start(new Pawn(), { playerId: ADA });
+    const replay = next.turn({ timeoutMs: 5_000 });
+    platform.send({
+      type: "turn_result",
+      sessionId: next.sessionId,
+      ok: true,
+      action: "move",
+      args: { dx: 1 },
+      result: { dx: 1 },
+      attempts: 1,
+      usage: { promptTokens: 1, completionTokens: 1 },
+    });
+    await expect(replay).resolves.toMatchObject({ action: "move" });
     await agents.close();
   });
 

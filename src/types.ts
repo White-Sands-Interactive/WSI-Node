@@ -27,6 +27,12 @@ export type AgentEvent =
       error: string;
     }
   | {
+      /** The platform ended the session on its own. turn() now throws SessionEndedError. */
+      type: "sessionEnded";
+      sessionId: string;
+      error: string;
+    }
+  | {
       type: "turnFailed";
       sessionId: string;
       error: string;

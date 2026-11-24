@@ -115,6 +115,8 @@ export type Envelope =
   | {
       type: "session_stopped";
       sessionId: string;
+      /** Set when the platform ended the session on its own. */
+      error?: string;
     }
   | {
       type: "mcp";

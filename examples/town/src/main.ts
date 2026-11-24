@@ -9,6 +9,9 @@
  * are plain English on the platform.
  *
  *   WSI_PLATFORM_KEY=pk_... WSI_PLATFORM_URL=wss://... npm start
+ *
+ * WSI_CAST_IDS=Mia=<id>,Finn=<id>,... sets the character IDs when the
+ * platform is not the one that seeded the defaults in cast.ts.
  */
 import { createReadStream, existsSync } from "node:fs";
 import { createServer } from "node:http";

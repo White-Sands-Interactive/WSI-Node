@@ -31,6 +31,14 @@ export class TurnTimeoutError extends Error {
   }
 }
 
+/** The platform ended the session. Start a new session to keep playing the character. */
+export class SessionEndedError extends Error {
+  constructor(message = "The platform ended this session") {
+    super(message);
+    this.name = "SessionEndedError";
+  }
+}
+
 export class ConnectionLostError extends Error {
   constructor(message = "Connection to the platform was lost") {
     super(message);

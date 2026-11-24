@@ -1,5 +1,11 @@
 # Changelog
 
+## Unreleased
+
+- When the platform ends a session on its own (`session_stopped` with an `error`), the turn in flight and every later `turn()` reject with the new `SessionEndedError` instead of timing out, and a `sessionEnded` event is emitted.
+- `World` starts a new session for a character whose session ended, or whose last 3 turns timed out (for platforms that do not send `session_stopped`). It emits a `restarted` event.
+- `examples/town`: `WSI_CAST_IDS=Mia=<id>,Finn=<id>,...` sets the character IDs, so the town can run against any platform.
+
 ## 1.3.0
 
 - `start()` takes `memory`, `maxActions`, `subgoals` and `ownInstructions`.

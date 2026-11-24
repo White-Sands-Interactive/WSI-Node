@@ -2,7 +2,7 @@ import { randomUUID } from "node:crypto";
 import { InMemoryTransport } from "@modelcontextprotocol/sdk/inMemory.js";
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import type { Transport } from "@modelcontextprotocol/sdk/shared/transport.js";
-import { ConnectionLostError, TurnFailedError } from "./errors.js";
+import { ConnectionLostError, SessionEndedError, TurnFailedError } from "./errors.js";
 import type { Logger } from "./logger.js";
 import { log } from "./logger.js";
 import { defaultMemoryPath, SessionMemory } from "./memory.js";
@@ -59,6 +59,8 @@ export class AgentServer {
   private connection: PlatformConnection | null = null;
   private readonly sessions = new Map<string, SessionRecord>();
   private readonly listeners = new Set<EventListener>();
+  /** Sessions the platform ended on its own, with the reason turn() reports. */
+  private readonly ended = new Map<string, string>();
   private readonly inline: InlinePlatform | undefined;
   private memory: SessionMemory | null = null;
   private started = false;
@@ -236,7 +238,11 @@ export class AgentServer {
 
   private async turn(sessionId: string, options?: TurnOptions): Promise<TurnResult> {
     const session = this.sessions.get(sessionId);
-    if (!session) throw new Error(`Unknown session ${sessionId}`);
+    if (!session) {
+      const ended = this.ended.get(sessionId);
+      if (ended) throw new SessionEndedError(ended);
+      throw new Error(`Unknown session ${sessionId}`);
+    }
     const timeoutMs = options?.timeoutMs ?? this.options.turnTimeoutMs ?? DEFAULT_TURN_TIMEOUT_MS;
     let outcome: TurnReport;
     try {
@@ -352,8 +358,10 @@ export class AgentServer {
           this.connection?.failSessionEvent(envelope.sessionId, "start", new Error(envelope.message));
         }
         return;
-      case "session_started":
       case "session_stopped":
+        this.endSession(envelope.sessionId, envelope.error);
+        return;
+      case "session_started":
       case "session_resumed":
       case "resume_err":
       case "hello_ok":
@@ -370,6 +378,27 @@ export class AgentServer {
         assertNever(envelope);
       }
     }
+  }
+
+  /**
+   * The platform stopped a session this server still holds, so the session
+   * ended without stop() being called. Fail the turn in flight and every
+   * later turn, so the game can start a new session.
+   */
+  private endSession(sessionId: string, error: string | undefined): void {
+    const session = this.sessions.get(sessionId);
+    if (!session) return;
+    this.sessions.delete(sessionId);
+    const message = error ? `The platform ended this session: ${error}` : "The platform ended this session";
+    this.ended.set(sessionId, message);
+    log(this.logger, "warn", `${session.name}: ${message}`);
+    // Tell listeners before the session's listeners are dropped with it.
+    const event: AgentEvent = { type: "sessionEnded", sessionId, error: error ?? "" };
+    for (const listener of this.listeners) listener(event);
+    for (const listener of session.listeners) listener(event);
+    session.gate.failTurn(new SessionEndedError(message));
+    session.gate.reset();
+    void session.server.close().catch(() => undefined);
   }
 
   private async stopSession(sessionId: string): Promise<void> {
