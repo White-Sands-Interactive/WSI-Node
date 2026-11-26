@@ -26,6 +26,8 @@ export type ToolDescriptor = {
 export type TokenUsage = {
   promptTokens: number;
   completionTokens: number;
+  /** The model id that answered. After a fallback this is the fallback, not the character's model. */
+  model?: string;
 };
 
 export type AttemptRecord = {

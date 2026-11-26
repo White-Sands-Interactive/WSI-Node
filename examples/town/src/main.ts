@@ -8,10 +8,10 @@
  * serves (say, go_to, approach, use, give, emote). Their roles and stories
  * are plain English on the platform.
  *
- *   WSI_PLATFORM_KEY=pk_... WSI_PLATFORM_URL=wss://... npm start
+ *   WSI_PLATFORM_KEY=pk_... TOWN_CAST_IDS='Mia=<uuid>,...' npm start
  *
- * WSI_CAST_IDS=Mia=<id>,Finn=<id>,... sets the character IDs when the
- * platform is not the one that seeded the defaults in cast.ts.
+ * DEMO=1 adds the hosted-demo extras: a visitor cap, TOWN_PASSCODE, /health,
+ * and a usage log while residents are awake.
  */
 import { createReadStream, existsSync } from "node:fs";
 import { createServer } from "node:http";
@@ -27,9 +27,10 @@ import { BOUNDS, places, props, spawn, things } from "./map.js";
 const PORT = Number(process.env.PORT ?? 8080);
 const SECONDS_PER_GAME_HOUR = 45;
 const START_HOUR = 8;
-const MAX_VISITORS = 12;
-// When set, a visitor must give this passcode to join. Residents run either way.
-const PASSCODE = (process.env.TOWN_PASSCODE ?? "").trim();
+const DEMO = process.env.DEMO === "1";
+const MAX_VISITORS = DEMO ? 12 : Number.POSITIVE_INFINITY;
+// When DEMO=1 and this is set, a visitor must give this passcode to join.
+const PASSCODE = DEMO ? (process.env.TOWN_PASSCODE ?? "").trim() : "";
 const MAX_PASSCODE_TRIES = 5;
 
 function passcodeMatches(given: unknown): boolean {
@@ -68,6 +69,7 @@ function clockText(): string {
 // Visitors -------------------------------------------------------------------
 type Visitor = { name: string; socket: WebSocket; body: WalkerBody; items: string[]; lastAction: number; look: number };
 const visitors = new Map<WebSocket, Visitor>();
+let awake = false;
 const bodies = new Map<string, WalkerBody>();
 const looks = new Map<string, unknown>();
 const thinking = new Set<string>();
@@ -133,7 +135,8 @@ world.on((event) => {
     }
   } else if (event.type === "turn") {
     const usage = event.result?.usage;
-    console.log(`[turn] ${event.character} ${event.ok ? (event.result?.steps ?? [{ action: event.result?.action }]).map((step) => step.action).join("+") : `failed: ${event.error}`}${usage ? ` (${usage.promptTokens + usage.completionTokens} tokens)` : ""}`);
+    const model = usage?.model ? ` ${usage.model}` : "";
+    console.log(`[turn] ${event.character} ${event.ok ? (event.result?.steps ?? [{ action: event.result?.action }]).map((step) => step.action).join("+") : `failed: ${event.error}`}${usage ? ` (${usage.promptTokens + usage.completionTokens} tokens${model})` : ""}`);
   }
 });
 
@@ -141,9 +144,9 @@ world.on((event) => {
 const TYPES: Record<string, string> = { ".html": "text/html; charset=utf-8", ".js": "text/javascript; charset=utf-8", ".css": "text/css; charset=utf-8", ".svg": "image/svg+xml" };
 const http = createServer((request, response) => {
   const path = normalize(decodeURIComponent((request.url ?? "/").split("?")[0] ?? "/")).replace(/^(\.\.[/\\])+/, "");
-  if (path === "/health") {
+  if (path === "/health" && DEMO) {
     response.writeHead(200, { "Content-Type": "application/json" });
-    response.end(JSON.stringify({ ok: true, residents: world.characters.size, visitors: visitors.size, turns: world.turnsUsed, passcode: PASSCODE !== "" }));
+    response.end(JSON.stringify({ ok: true, residents: world.characters.size, visitors: visitors.size, turns: world.turnsUsed, passcode: PASSCODE !== "", awake }));
     return;
   }
   const file = join(PUBLIC_DIR, path === "/" ? "index.html" : path);
@@ -307,62 +310,62 @@ setInterval(() => {
 // Platform sessions stay closed until a human is in town, and close again when
 // the last one leaves.
 const placeAt = new Map(places.map((place) => [place.name, place.position]));
-let residentsOpen = false;
+let residentsAdded = false;
 let residentGate: Promise<void> = Promise.resolve();
 
 function syncResidents(): void {
-  residentGate = residentGate.then(() => (visitors.size > 0 ? openResidents() : closeResidents())).catch((error: unknown) => {
-    console.error(`[town] residents failed: ${error instanceof Error ? error.message : String(error)}`);
-  });
-}
-
-async function openResidents(): Promise<void> {
-  if (visitors.size === 0 || residentsOpen) return;
-  if (world.characters.size === 0) {
-    for (const [index, member] of cast.entries()) {
-      const start = placeAt.get(member.startsAt)!;
-      const body = new WalkerBody({ x: start.x + ((index % 3) - 1) * 4, y: start.y + 3 }, 14, {
-        emote: (name) => broadcast({ t: "emote", name: member.name, emote: name }),
-      });
-      try {
-        await world.addCharacter({ id: member.id, name: member.name, body, home: member.home });
-        bodies.set(member.name, body);
-        looks.set(member.name, member.look);
-        console.log(`[town] ${member.name} is in town`);
-      } catch (error) {
-        console.error(`[town] ${member.name} could not start: ${error instanceof Error ? error.message : String(error)}`);
+  residentGate = residentGate
+    .then(async () => {
+      if (visitors.size > 0) {
+        if (!residentsAdded) {
+          for (const [index, member] of cast.entries()) {
+            const start = placeAt.get(member.startsAt)!;
+            const body = new WalkerBody({ x: start.x + ((index % 3) - 1) * 4, y: start.y + 3 }, 14, {
+              emote: (name) => broadcast({ t: "emote", name: member.name, emote: name }),
+            });
+            try {
+              await world.addCharacter({ id: member.id, name: member.name, body, home: member.home });
+              bodies.set(member.name, body);
+              looks.set(member.name, member.look);
+              console.log(`[town] ${member.name} is in town`);
+            } catch (error) {
+              console.error(`[town] ${member.name} could not start: ${error instanceof Error ? error.message : String(error)}`);
+            }
+          }
+          residentsAdded = world.characters.size > 0;
+        }
+        if (visitors.size === 0) {
+          await world.pause();
+          awake = false;
+          console.log("[town] residents are asleep");
+          return;
+        }
+        if (!awake) {
+          await world.resume();
+          awake = true;
+          console.log(`[town] the town is awake: ${world.characters.size} residents`);
+        }
+      } else if (residentsAdded && awake) {
+        await world.pause();
+        awake = false;
+        console.log("[town] residents are asleep");
       }
-    }
-  } else {
-    await Promise.all([...world.characters.values()].map((character) => character.restart?.() ?? Promise.resolve()));
-  }
-  if (visitors.size === 0) {
-    await closeResidents();
-    return;
-  }
-  world.start();
-  residentsOpen = true;
-  console.log(`[town] the town is awake: ${world.characters.size} residents`);
-}
-
-async function closeResidents(): Promise<void> {
-  if (visitors.size > 0) return;
-  world.stop();
-  const wasOpen = residentsOpen;
-  residentsOpen = false;
-  const characters = [...world.characters.values()];
-  if (characters.length === 0) return;
-  await Promise.all(characters.map((character) => character.agent.stop()));
-  if (wasOpen) console.log("[town] residents are asleep");
+    })
+    .catch((error: unknown) => {
+      console.error(`[town] residents failed: ${error instanceof Error ? error.message : String(error)}`);
+    });
 }
 
 // Boot ----------------------------------------------------------------------------
 http.listen(PORT, () => console.log(`[town] listening on :${PORT}; residents start when a visitor joins`));
 
-setInterval(() => {
-  const parts = [...world.characters.values()].map((character) => `${character.name} ${character.turns} turns/${Math.floor(character.tokens / 1000)}k`);
-  console.log(`[town] usage: ${parts.join(", ")}`);
-}, 120_000);
+if (DEMO) {
+  setInterval(() => {
+    if (!awake) return;
+    const parts = [...world.characters.values()].map((character) => `${character.name} ${character.turns} turns/${Math.floor(character.tokens / 1000)}k`);
+    console.log(`[town] usage: ${parts.join(", ")}`);
+  }, 120_000);
+}
 
 for (const signal of ["SIGINT", "SIGTERM"] as const) {
   process.on(signal, () => {

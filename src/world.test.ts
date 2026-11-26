@@ -153,4 +153,47 @@ describe("World", () => {
       expect(mia.agent.sessionId).toBe("s1");
     }
   }, 20_000);
+
+  it("pause stops turns and resume opens a new session", async () => {
+    let starts = 0;
+    let stops = 0;
+    let turns = 0;
+    const server = {
+      async start(): Promise<AgentHandle> {
+        starts += 1;
+        return {
+          sessionId: `s${starts}`,
+          async turn(): Promise<TurnResult> {
+            turns += 1;
+            return { action: "idle", args: {}, result: { ok: true }, attempts: 1, usage: { promptTokens: 1, completionTokens: 1 } };
+          },
+          stop: async () => {
+            stops += 1;
+          },
+          on: () => () => undefined,
+          observe: () => undefined,
+          relationships: () => ({}),
+        };
+      },
+    } as unknown as AgentServer;
+    const world = new World(server, { name: "Test Town", idleSeconds: 0.01, turnsPerMinute: 6000 });
+    const mia = await world.addCharacter({ id: "5a4d7000-0000-4000-8000-0000000000b1", name: "Mia", body: body(0, 0) });
+    mia.wake = 0;
+    world.start();
+    const deadline = Date.now() + 3_000;
+    while (turns < 1 && Date.now() < deadline) await wait(20);
+    expect(turns).toBeGreaterThan(0);
+    await world.pause();
+    const pausedTurns = turns;
+    await wait(400);
+    expect(turns).toBe(pausedTurns);
+    expect(stops).toBe(1);
+    expect(starts).toBe(1);
+    await world.resume();
+    expect(starts).toBe(2);
+    const resumed = Date.now() + 3_000;
+    while (turns === pausedTurns && Date.now() < resumed) await wait(20);
+    world.stop();
+    expect(turns).toBeGreaterThan(pausedTurns);
+  }, 10_000);
 });
