@@ -199,6 +199,7 @@ sockets.on("connection", (socket) => {
       bodies.set(name, body);
       looks.set(name, visitor.look);
       world.addPerson({ name, getPosition: () => body.getPosition() });
+      syncResidents();
       send(socket, {
         t: "init",
         you: name,
@@ -270,6 +271,7 @@ sockets.on("connection", (socket) => {
     looks.delete(visitor.name);
     world.removePerson(visitor.name);
     console.log(`[visitor] ${visitor.name} left (${visitors.size} online)`);
+    syncResidents();
   });
 });
 
@@ -301,27 +303,61 @@ setInterval(() => {
   for (const visitor of visitors.values()) sendPeople(visitor);
 }, 5000);
 
-// Boot ----------------------------------------------------------------------------
-http.listen(PORT, () => console.log(`[town] listening on :${PORT}`));
-
+// Residents -------------------------------------------------------------------------
+// Platform sessions stay closed until a human is in town, and close again when
+// the last one leaves.
 const placeAt = new Map(places.map((place) => [place.name, place.position]));
-for (const [index, member] of cast.entries()) {
-  const start = placeAt.get(member.startsAt)!;
-  const body = new WalkerBody({ x: start.x + ((index % 3) - 1) * 4, y: start.y + 3 }, 14, {
-    emote: (name) => broadcast({ t: "emote", name: member.name, emote: name }),
+let residentsOpen = false;
+let residentGate: Promise<void> = Promise.resolve();
+
+function syncResidents(): void {
+  residentGate = residentGate.then(() => (visitors.size > 0 ? openResidents() : closeResidents())).catch((error: unknown) => {
+    console.error(`[town] residents failed: ${error instanceof Error ? error.message : String(error)}`);
   });
-  bodies.set(member.name, body);
-  looks.set(member.name, member.look);
-  try {
-    await world.addCharacter({ id: member.id, name: member.name, body, home: member.home });
-    console.log(`[town] ${member.name} is in town`);
-  } catch (error) {
-    bodies.delete(member.name);
-    console.error(`[town] ${member.name} could not start: ${error instanceof Error ? error.message : String(error)}`);
-  }
 }
-world.start();
-console.log(`[town] the town is awake: ${world.characters.size} residents`);
+
+async function openResidents(): Promise<void> {
+  if (visitors.size === 0 || residentsOpen) return;
+  if (world.characters.size === 0) {
+    for (const [index, member] of cast.entries()) {
+      const start = placeAt.get(member.startsAt)!;
+      const body = new WalkerBody({ x: start.x + ((index % 3) - 1) * 4, y: start.y + 3 }, 14, {
+        emote: (name) => broadcast({ t: "emote", name: member.name, emote: name }),
+      });
+      try {
+        await world.addCharacter({ id: member.id, name: member.name, body, home: member.home });
+        bodies.set(member.name, body);
+        looks.set(member.name, member.look);
+        console.log(`[town] ${member.name} is in town`);
+      } catch (error) {
+        console.error(`[town] ${member.name} could not start: ${error instanceof Error ? error.message : String(error)}`);
+      }
+    }
+  } else {
+    await Promise.all([...world.characters.values()].map((character) => character.restart?.() ?? Promise.resolve()));
+  }
+  if (visitors.size === 0) {
+    await closeResidents();
+    return;
+  }
+  world.start();
+  residentsOpen = true;
+  console.log(`[town] the town is awake: ${world.characters.size} residents`);
+}
+
+async function closeResidents(): Promise<void> {
+  if (visitors.size > 0) return;
+  world.stop();
+  const wasOpen = residentsOpen;
+  residentsOpen = false;
+  const characters = [...world.characters.values()];
+  if (characters.length === 0) return;
+  await Promise.all(characters.map((character) => character.agent.stop()));
+  if (wasOpen) console.log("[town] residents are asleep");
+}
+
+// Boot ----------------------------------------------------------------------------
+http.listen(PORT, () => console.log(`[town] listening on :${PORT}; residents start when a visitor joins`));
 
 setInterval(() => {
   const parts = [...world.characters.values()].map((character) => `${character.name} ${character.turns} turns/${Math.floor(character.tokens / 1000)}k`);
