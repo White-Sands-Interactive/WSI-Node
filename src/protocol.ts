@@ -26,6 +26,8 @@ export type ToolDescriptor = {
 export type TokenUsage = {
   promptTokens: number;
   completionTokens: number;
+  /** The model id that answered. After a fallback this is the fallback, not the character's model. */
+  model?: string;
 };
 
 export type AttemptRecord = {
@@ -115,6 +117,8 @@ export type Envelope =
   | {
       type: "session_stopped";
       sessionId: string;
+      /** Set when the platform ended the session on its own. */
+      error?: string;
     }
   | {
       type: "mcp";

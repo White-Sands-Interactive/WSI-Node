@@ -3,6 +3,7 @@ export {
   ConnectionLostError,
   PlatformAuthError,
   ProtocolVersionError,
+  SessionEndedError,
   TurnFailedError,
   TurnTimeoutError,
 } from "./errors.js";

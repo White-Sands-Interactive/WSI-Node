@@ -1,7 +1,8 @@
 import { describe, expect, it } from "vitest";
 import type { AgentServer } from "./agent-server.js";
 import type { AgentHandle, TurnResult } from "./types.js";
-import { World, type Body, type Position } from "./world.js";
+import { SessionEndedError, TurnTimeoutError } from "./errors.js";
+import { World, type Body, type Position, type WorldEvent } from "./world.js";
 
 type Tools = Record<string, (...args: unknown[]) => unknown>;
 
@@ -105,4 +106,94 @@ describe("World", () => {
     expect(mia.place()).toBe("beach");
     world.stop();
   }, 15_000);
+
+  it("starts a new session when the platform ends one, or after turns keep timing out", async () => {
+    for (const failure of [
+      () => new SessionEndedError("The platform ended this session: model request failed"),
+      () => new TurnTimeoutError("turn() timed out after 10ms"),
+    ]) {
+      const starts: string[] = [];
+      let stops = 0;
+      const server = {
+        async start(tools: Tools, options: Record<string, unknown>): Promise<AgentHandle> {
+          const generation = starts.length;
+          starts.push(String(options.playerId));
+          return {
+            sessionId: `s${generation}`,
+            async turn(): Promise<TurnResult> {
+              if (generation === 0) throw failure();
+              tools.see!();
+              return { action: "idle", args: {}, result: tools.idle!(), attempts: 1, usage: { promptTokens: 1, completionTokens: 1 } };
+            },
+            stop: async () => {
+              stops += 1;
+            },
+            on: () => () => undefined,
+            observe: () => undefined,
+            relationships: () => ({}),
+          };
+        },
+      } as unknown as AgentServer;
+      const world = new World(server, { name: "Test Town", idleSeconds: 0.01, turnsPerMinute: 6000 });
+      world.addPlace("cafe", { description: "A cafe", position: { x: 0, y: 0 } });
+      const events: WorldEvent[] = [];
+      world.on((event) => void events.push(event));
+      const mia = await world.addCharacter({ id: "5a4d7000-0000-4000-8000-0000000000b1", name: "Mia", body: body(0, 0) });
+      world.start();
+      const deadline = Date.now() + 8_000;
+      while (!events.some((event) => event.type === "turn" && event.ok) && Date.now() < deadline) {
+        mia.wakeIn(0);
+        await wait(20);
+      }
+      world.stop();
+      expect(events.some((event) => event.type === "restarted" && event.character === "Mia")).toBe(true);
+      expect(events.some((event) => event.type === "turn" && event.ok)).toBe(true);
+      expect(starts).toEqual(["5a4d7000-0000-4000-8000-0000000000b1", "5a4d7000-0000-4000-8000-0000000000b1"]);
+      expect(stops).toBe(1);
+      expect(mia.agent.sessionId).toBe("s1");
+    }
+  }, 20_000);
+
+  it("pause stops turns and resume opens a new session", async () => {
+    let starts = 0;
+    let stops = 0;
+    let turns = 0;
+    const server = {
+      async start(): Promise<AgentHandle> {
+        starts += 1;
+        return {
+          sessionId: `s${starts}`,
+          async turn(): Promise<TurnResult> {
+            turns += 1;
+            return { action: "idle", args: {}, result: { ok: true }, attempts: 1, usage: { promptTokens: 1, completionTokens: 1 } };
+          },
+          stop: async () => {
+            stops += 1;
+          },
+          on: () => () => undefined,
+          observe: () => undefined,
+          relationships: () => ({}),
+        };
+      },
+    } as unknown as AgentServer;
+    const world = new World(server, { name: "Test Town", idleSeconds: 0.01, turnsPerMinute: 6000 });
+    const mia = await world.addCharacter({ id: "5a4d7000-0000-4000-8000-0000000000b1", name: "Mia", body: body(0, 0) });
+    mia.wake = 0;
+    world.start();
+    const deadline = Date.now() + 3_000;
+    while (turns < 1 && Date.now() < deadline) await wait(20);
+    expect(turns).toBeGreaterThan(0);
+    await world.pause();
+    const pausedTurns = turns;
+    await wait(400);
+    expect(turns).toBe(pausedTurns);
+    expect(stops).toBe(1);
+    expect(starts).toBe(1);
+    await world.resume();
+    expect(starts).toBe(2);
+    const resumed = Date.now() + 3_000;
+    while (turns === pausedTurns && Date.now() < resumed) await wait(20);
+    world.stop();
+    expect(turns).toBeGreaterThan(pausedTurns);
+  }, 10_000);
 });

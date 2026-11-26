@@ -1,0 +1,7 @@
+[
+  { "name": "Mia", "home": "mia_cottage", "startsAt": "cafe", "look": { "skin": "#d6a078", "shirt": "#f0785a", "hair": "#5a3220" } },
+  { "name": "Finn", "home": "finn_cottage", "startsAt": "pier", "look": { "skin": "#e6bea0", "shirt": "#3c5a6e", "hair": "#d8d8d8" } },
+  { "name": "Ruby", "home": "ruby_cottage", "startsAt": "general_store", "look": { "skin": "#78503c", "shirt": "#c83c78", "hair": "#201410" } },
+  { "name": "Leo", "home": "leo_cottage", "startsAt": "park", "look": { "skin": "#f0cdaa", "shirt": "#6ea078", "hair": "#2a2a30" } },
+  { "name": "Juno", "home": "juno_cottage", "startsAt": "plaza", "look": { "skin": "#be8c64", "shirt": "#965ae6", "hair": "#f0c040" } }
+]

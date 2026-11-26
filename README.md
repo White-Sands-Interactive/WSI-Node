@@ -363,4 +363,18 @@ world.start();
 world.say("Alex", "Hi Mia!");
 ```
 
-`examples/town` is a complete browser game built this way: `npm run build && WSI_PLATFORM_KEY=pk_... npm run town`, then open `http://localhost:8080`.
+`pause()` stops turns and closes each character's session. `resume()` opens a new session for each character and starts turns again. Use them when a game should not spend model calls while nobody is playing.
+
+```ts
+await world.pause();
+await world.resume();
+```
+
+`examples/town` is a complete browser game built this way. Create one character per resident in the web app, then:
+
+```sh
+npm run build
+WSI_PLATFORM_KEY=pk_... TOWN_CAST_IDS='Mia=<uuid>,Finn=<uuid>,Ruby=<uuid>,Leo=<uuid>,Juno=<uuid>' npm run town
+```
+
+Open `http://localhost:8080`. `DEMO=1` turns on the hosted-demo extras: a visitor cap, an optional `TOWN_PASSCODE`, `/health`, and a usage log.

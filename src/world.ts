@@ -13,6 +13,10 @@
  */
 import { z } from "zod";
 import type { AgentServer } from "./agent-server.js";
+import { SessionEndedError, TurnTimeoutError } from "./errors.js";
+
+/** Turns in a row that may time out before the character gets a new session. */
+const RESTART_AFTER_TIMEOUTS = 3;
 import type { AgentMetadata } from "./reflect.js";
 import type { AgentHandle, TurnResult } from "./types.js";
 
@@ -91,7 +95,9 @@ export type WorldEvent =
   | { type: "thinking"; character: string; on: boolean }
   | { type: "give"; from: string; to: string; item: string }
   | { type: "emote"; character: string; emote: string }
-  | { type: "turn"; character: string; ok: boolean; result?: TurnResult; error?: string };
+  | { type: "turn"; character: string; ok: boolean; result?: TurnResult; error?: string }
+  /** The character's session died and a new one was started. */
+  | { type: "restarted"; character: string };
 
 type Place = { name: string; description: string; position: Position; radius: number };
 type Thing = { id: string; name: string; place?: string; position: Position; activities: Record<string, Activity>; usedBy: string | null };
@@ -99,6 +105,9 @@ type Person = { name: string; getPosition: () => Position | null; carrying: stri
 type NoticeOptions = { about?: string; turn?: boolean; urgent?: boolean };
 
 const DEFAULT_EMOTES = ["wave", "laugh", "cheer", "dance", "point", "shrug"];
+
+/** How to open a fresh platform session for a character. Private to this module. */
+const sessionRestarts = new WeakMap<Character, () => Promise<void>>();
 
 function distance(a: Position, b: Position): number {
   return Math.hypot(a.x - b.x, a.y - b.y, (a.z ?? 0) - (b.z ?? 0));
@@ -187,6 +196,7 @@ export class Character {
   /** @internal */ busy = false;
   /** @internal */ greeted = new Map<string, number>();
   /** @internal */ needWarned = new Set<string>();
+  /** @internal Turns in a row that timed out. */ timeouts = 0;
   private task = 0;
   private using: Thing | null = null;
   private chat = { count: 0, resetAt: 0 };
@@ -487,6 +497,8 @@ export class World {
   private readonly warn: (message: string) => void;
   private readonly listeners = new Set<(event: WorldEvent) => void>();
   private timer: ReturnType<typeof setInterval> | null = null;
+  /** True after pause(), until resume() opens the sessions again. */
+  private paused = false;
   private budget = 0;
   private budgetAt = now();
   private lastTick = now();
@@ -637,17 +649,30 @@ export class World {
       character.needs[need] = spec.start ?? 55 + Math.floor(Math.random() * 36);
     }
     const instructions = [this.guide(def.home), def.instructions].filter(Boolean).join("\n\n");
-    character.agent = await this.server.start(new CharacterTools(character), {
-      name: def.name,
-      playerId: def.id,
-      instructions,
-      ownInstructions: true,
-      memory: this.memory,
-      maxActions: this.maxActions,
-      subgoals: false,
-      ...(def.goal ? { goal: def.goal } : {}),
+    const start = async () => {
+      character.agent = await this.server.start(new CharacterTools(character), {
+        name: def.name,
+        playerId: def.id,
+        instructions,
+        ownInstructions: true,
+        memory: this.memory,
+        maxActions: this.maxActions,
+        subgoals: false,
+        ...(def.goal ? { goal: def.goal } : {}),
+      });
+      this.listen(character);
+    };
+    await start();
+    sessionRestarts.set(character, async () => {
+      const old = character.agent;
+      await old.stop().catch(() => undefined);
+      await start();
     });
     this.characters.set(def.name, character);
+    return character;
+  }
+
+  private listen(character: Character): void {
     character.agent.on((event) => {
       if (event.type === "relationship") {
         this.emit({
@@ -665,7 +690,6 @@ export class World {
         this.emit({ type: "action", character: character.name, action: event.action, args: event.args });
       }
     });
-    return character;
   }
 
   /** @internal Carry a spoken line to everyone who can hear it. Returns how many heard it. */
@@ -761,6 +785,7 @@ export class World {
     character.agent
       .turn()
       .then((result) => {
+        character.timeouts = 0;
         character.tokens += result.usage.promptTokens + result.usage.completionTokens;
         this.emit({ type: "turn", character: character.name, ok: true, result });
         character.wakeIn(character.inbox.length > 0 ? 1 : this.idleDelay(character));
@@ -769,6 +794,12 @@ export class World {
         const message = error instanceof Error ? error.message : String(error);
         this.warn(`${character.name} turn failed: ${message}`);
         this.emit({ type: "turn", character: character.name, ok: false, error: message });
+        character.timeouts = error instanceof TurnTimeoutError ? character.timeouts + 1 : 0;
+        // A session the platform ended, or one that keeps timing out (an
+        // older platform does not say when a session dies), is replaced.
+        if (error instanceof SessionEndedError || character.timeouts >= RESTART_AFTER_TIMEOUTS) {
+          return this.restartSession(character);
+        }
         character.wakeIn(Math.max(20, this.idleSeconds));
       })
       .finally(() => {
@@ -777,6 +808,23 @@ export class World {
         this.turnsUsed += 1;
         this.emit({ type: "thinking", character: character.name, on: false });
       });
+  }
+
+  private async restartSession(character: Character): Promise<void> {
+    const restart = sessionRestarts.get(character);
+    if (!restart || this.paused) return;
+    this.warn(`${character.name}: starting a new session`);
+    try {
+      await restart();
+      character.timeouts = 0;
+      this.emit({ type: "restarted", character: character.name });
+      character.wakeIn(1);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      this.warn(`${character.name}: new session failed: ${message}`);
+      // Try again after the next failed turn.
+      character.wakeIn(Math.max(20, this.idleSeconds));
+    }
   }
 
   private tick(): void {
@@ -835,9 +883,46 @@ export class World {
     }, 500);
   }
 
-  /** Stop giving turns. Sessions stay open until the server closes. */
+  /** Stop giving turns. Sessions stay open until pause() or the server closes. */
   stop(): void {
     if (this.timer) clearInterval(this.timer);
     this.timer = null;
+  }
+
+  /**
+   * Stop giving turns and close every character session.
+   * The characters stay in the world. resume() opens new sessions.
+   */
+  async pause(): Promise<void> {
+    this.stop();
+    if (this.paused) return;
+    this.paused = true;
+    await Promise.all(
+      [...this.characters.values()].map((character) => character.agent.stop().catch(() => undefined)),
+    );
+  }
+
+  /**
+   * Open a session for every character and start giving turns.
+   * Characters added while the world is running already have a session, so
+   * resume() only restarts sessions that pause() closed.
+   */
+  async resume(): Promise<void> {
+    if (this.paused) {
+      await Promise.all(
+        [...this.characters.values()].map(async (character) => {
+          const restart = sessionRestarts.get(character);
+          if (!restart) return;
+          try {
+            await restart();
+          } catch (error) {
+            const message = error instanceof Error ? error.message : String(error);
+            this.warn(`${character.name}: new session failed: ${message}`);
+          }
+        }),
+      );
+      this.paused = false;
+    }
+    this.start();
   }
 }
